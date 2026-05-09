@@ -147,6 +147,7 @@
     .tiny-toast.show { opacity: 1; }
 
     .record-ui {
+      pointer-events: none;
       left: 50%;
       bottom: calc(20px + var(--safe-bottom));
       transform: translateX(-50%);
@@ -158,6 +159,7 @@
       text-align: center;
     }
     .record-button {
+      pointer-events: auto;
       position: relative;
       width: 76px;
       height: 76px;
@@ -189,6 +191,7 @@
     }
 
     .pad-wrap {
+      pointer-events: auto;
       bottom: calc(24px + var(--safe-bottom));
       width: 126px;
       z-index: 28;
@@ -498,7 +501,7 @@
           <a class="primary-link" href="hiro-marker-print.html" target="_blank" rel="noopener">Hiroを印刷</a>
           <button class="danger" id="resetAll" type="button">全部リセット</button>
         </div>
-        <p class="small">録画は下部中央のボタンで開始・停止します。停止後、自動で保存されます。録画にUIは入りません。</p>
+        <p class="small">録画は下部中央のボタンで開始・停止します。録画中も、回転・高さ・大きさ・位置の調整を続けられます。停止後、自動で保存されます。録画にUIは入りません。</p>
         <p class="small">MP4対応ブラウザではMP4、非対応時はWebMで保存します。マイク許可を出すと音声も入ります。</p>
       </div>
     </section>
@@ -1238,6 +1241,7 @@ async function startRecording() {
   // 明示的に停止ボタンが押されるまで録画を続けます。
   state.recorder.start();
   state.recording = true;
+  // 録画中も各UIをそのまま操作できるよう、調整UIは無効化しません。
   elements.recordButton.classList.add('recording');
   elements.recordButton.setAttribute('aria-label', '録画停止');
   elements.recordLabel.textContent = '録画停止';
