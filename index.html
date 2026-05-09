@@ -14,13 +14,14 @@
       overflow: hidden;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: #111;
+      touch-action: none;
     }
     a { color: #9bd1ff; }
     .menu-button {
       position: fixed;
       top: 12px;
       right: 12px;
-      z-index: 30;
+      z-index: 40;
       border: 1px solid rgba(255,255,255,.28);
       border-radius: 999px;
       padding: 10px 15px;
@@ -31,28 +32,49 @@
       box-shadow: 0 8px 24px rgba(0,0,0,.28);
       cursor: pointer;
     }
-    .status-pill {
+    .live-controls {
       position: fixed;
-      left: 12px;
-      bottom: 12px;
-      right: 12px;
-      z-index: 20;
-      width: fit-content;
-      max-width: calc(100vw - 24px);
-      border-radius: 999px;
-      padding: 9px 13px;
-      color: #e0f2fe;
-      background: rgba(0,0,0,.68);
-      border: 1px solid rgba(255,255,255,.16);
-      backdrop-filter: blur(10px);
-      font-size: 12px;
-      line-height: 1.35;
-      box-shadow: 0 8px 24px rgba(0,0,0,.22);
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      z-index: 35;
+      color: #fff;
+      background: rgba(7, 10, 18, .72);
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 18px;
+      padding: 10px 12px 12px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 12px 36px rgba(0,0,0,.35);
     }
+    .live-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 5px;
+      font-size: 12px;
+      font-weight: 800;
+      opacity: .9;
+    }
+    .live-title span:last-child {
+      font-weight: 650;
+      opacity: .72;
+    }
+    .control {
+      display: grid;
+      grid-template-columns: 64px 1fr 48px;
+      width: 100%;
+      gap: 8px;
+      align-items: center;
+      padding: 5px 0;
+      font-size: 13px;
+    }
+    .control input { width: 100%; }
+    .control b { text-align: right; font-variant-numeric: tabular-nums; }
     .modal-backdrop {
       position: fixed;
       inset: 0;
-      z-index: 25;
+      z-index: 45;
       display: none;
       align-items: center;
       justify-content: center;
@@ -105,7 +127,7 @@
       gap: 9px;
       align-items: center;
     }
-    button, label.btn, select, input[type=range] {
+    button, label.btn, select {
       border: 0;
       border-radius: 999px;
       padding: 9px 12px;
@@ -117,17 +139,6 @@
     label.btn { display: inline-flex; align-items: center; }
     input[type=file] { display: none; }
     select { min-width: 112px; }
-    .control {
-      display: grid;
-      grid-template-columns: 74px 1fr 42px;
-      width: 100%;
-      gap: 8px;
-      align-items: center;
-      padding: 7px 0;
-      font-size: 13px;
-    }
-    .control input { width: 100%; }
-    .control b { text-align: right; }
     .small { font-size: 12px; opacity: .82; }
     .primary-link {
       display: inline-flex;
@@ -141,6 +152,11 @@
       font-weight: 800;
     }
     .ghost-button { background: #e5e7eb; }
+    @media (max-height: 640px) {
+      .live-controls { padding: 8px 10px; }
+      .control { grid-template-columns: 56px 1fr 44px; padding: 3px 0; font-size: 12px; }
+      .live-title { margin-bottom: 2px; }
+    }
   </style>
   <script>
     AFRAME.registerComponent('keep-last-marker-pose', {
@@ -152,6 +168,12 @@
         this.hasPose = false;
         this.position = new THREE.Vector3();
         this.quaternion = new THREE.Quaternion();
+        window.addEventListener('reset-ar-pose', () => {
+          this.hasPose = false;
+          if (this.data.anchor && this.data.anchor.object3D) {
+            this.data.anchor.object3D.visible = false;
+          }
+        });
       },
       tick: function () {
         const markerEl = this.data.marker;
@@ -161,15 +183,14 @@
         if (markerEl.object3D.visible) {
           markerEl.object3D.updateMatrixWorld(true);
 
-          // Hiroマーカーの検出状態によって matrixWorld の scale が揺れることがあるため、
-          // 位置と回転だけを使います。絵の大きさは下の「大きさ」スライダーだけで変更します。
+          // Hiroの見え方や検出ズレで matrixWorld の scale が揺れることがあるため、
+          // ここでは位置と回転だけを取得します。縮尺は常に固定です。
           markerEl.object3D.matrixWorld.decompose(this.position, this.quaternion, new THREE.Vector3());
           anchorEl.object3D.position.copy(this.position);
           anchorEl.object3D.quaternion.copy(this.quaternion);
           anchorEl.object3D.scale.set(1, 1, 1);
           anchorEl.object3D.visible = true;
           this.hasPose = true;
-          window.__markerSeen = true;
         } else if (!this.hasPose) {
           anchorEl.object3D.visible = false;
         } else {
@@ -181,14 +202,21 @@
 </head>
 <body>
   <button class="menu-button" id="openMenu" type="button" aria-haspopup="dialog" aria-controls="menuModal">menu</button>
-  <div class="status-pill" id="status">読み込み中...</div>
 
-  <div class="modal-backdrop open" id="menuModal" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
+  <div class="live-controls" aria-label="AR画像の調整">
+    <div class="live-title"><span>AR調整</span><span>画面を見ながら調整</span></div>
+    <label class="control">高さ <input id="height" type="range" min="0" max="8" step="0.1" value="1.0"><b id="heightVal">1.0</b></label>
+    <label class="control">横 <input id="offsetX" type="range" min="-4" max="4" step="0.05" value="0"><b id="offsetXVal">0.00</b></label>
+    <label class="control">大きさ <input id="size" type="range" min="0.2" max="4" step="0.05" value="1.2"><b id="sizeVal">1.20</b></label>
+    <label class="control">回転 <input id="yaw" type="range" min="-180" max="180" step="1" value="0"><b id="yawVal">0°</b></label>
+  </div>
+
+  <div class="modal-backdrop" id="menuModal" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
     <section class="modal">
       <div class="modal-header">
         <div>
           <h1 id="menuTitle">動くお絵かきAR</h1>
-          <p>Hiroマーカーを映すと、魚・クラゲ・自分の絵が動きます。Hiroから離れても、最後に見えた位置に画像を残します。Hiroの検出がズレても、絵の縮尺は固定します。</p>
+          <p>Hiroマーカーを映すと、魚・クラゲ・自分の絵が動きます。調整は画面下のスライダーで、ARを見ながら行えます。</p>
         </div>
         <button class="close-button" id="closeMenu" type="button" aria-label="閉じる">×</button>
       </div>
@@ -212,14 +240,9 @@
             <option value="swim">泳ぐ</option>
             <option value="spin">くるくる</option>
             <option value="jump">ぴょんぴょん</option>
+            <option value="still">止める</option>
           </select>
         </div>
-      </div>
-
-      <div class="section">
-        <label class="control">大きさ <input id="scale" type="range" min="0.3" max="3.5" step="0.1" value="1.2"><b id="scaleVal">1.2</b></label>
-        <label class="control">高さ <input id="height" type="range" min="0" max="5" step="0.1" value="1.0"><b id="heightVal">1.0</b></label>
-        <p class="small">Hiroマーカーの揺れでは絵の縮尺を変えません。大きさを変える時はこのスライダーを使います。</p>
       </div>
 
       <div class="section">
@@ -227,7 +250,7 @@
           <a class="primary-link" href="hiro-marker-print.html" target="_blank" rel="noopener">Hiroを印刷</a>
           <button class="ghost-button" id="resetPose" type="button">表示位置をリセット</button>
         </div>
-        <p class="small">リセット後は、もう一度Hiroマーカーを映すと画像が表示されます。</p>
+        <p class="small">Hiroを見失っても通知は出しません。画像は最後に認識した位置に残ります。もう一度Hiroを映すと位置だけ更新され、縮尺は変わりません。</p>
       </div>
     </section>
   </div>
@@ -242,14 +265,14 @@
     <a-marker id="hiroMarker" preset="hiro" smooth="true" smoothCount="8" smoothTolerance="0.01" smoothThreshold="5"></a-marker>
 
     <a-entity id="lastAnchor" visible="false">
-      <a-entity
-        id="drawing"
-        geometry="primitive:plane; width:1; height:1"
-        material="transparent:true; side:double; alphaTest:0.03"
-        position="0 1.0 0"
-        rotation="-90 0 0"
-        scale="1.2 1.2 1.2"
-      ></a-entity>
+      <a-entity id="artworkGroup" position="0 1.0 0" rotation="0 0 0" scale="1.2 1.2 1.2">
+        <a-entity
+          id="drawing"
+          geometry="primitive:plane; width:1; height:1"
+          material="transparent:true; side:double; alphaTest:0.03"
+          rotation="-90 0 0"
+        ></a-entity>
+      </a-entity>
     </a-entity>
 
     <a-entity camera></a-entity>
@@ -292,24 +315,27 @@ const jellyfishSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height
   </g>
 </svg>`;
 
+
 const drawing = document.getElementById('drawing');
+const artworkGroup = document.getElementById('artworkGroup');
 const anchor = document.getElementById('lastAnchor');
-const marker = document.getElementById('hiroMarker');
 const preset = document.getElementById('preset');
 const motion = document.getElementById('motion');
-const scale = document.getElementById('scale');
 const height = document.getElementById('height');
-const scaleVal = document.getElementById('scaleVal');
+const offsetX = document.getElementById('offsetX');
+const size = document.getElementById('size');
+const yaw = document.getElementById('yaw');
 const heightVal = document.getElementById('heightVal');
+const offsetXVal = document.getElementById('offsetXVal');
+const sizeVal = document.getElementById('sizeVal');
+const yawVal = document.getElementById('yawVal');
 const fileInput = document.getElementById('file');
-const status = document.getElementById('status');
 const modal = document.getElementById('menuModal');
 const openMenu = document.getElementById('openMenu');
 const closeMenu = document.getElementById('closeMenu');
 const resetPose = document.getElementById('resetPose');
 
 const textureCache = {};
-window.__markerSeen = false;
 
 function openModal() {
   modal.classList.add('open');
@@ -359,12 +385,10 @@ function imageToPngDataUrl(src, maxSize = 1024) {
 }
 
 async function setArtworkFromSvg(name, svg) {
-  status.textContent = `${name}を読み込み中...`;
   if (!textureCache[name]) {
     textureCache[name] = await imageToPngDataUrl(svgToDataUri(svg));
   }
   setArtworkTexture(textureCache[name].dataUrl, textureCache[name].ratio);
-  updateStatus(`${name}を表示中。Hiroマーカーを映してください。`);
 }
 
 function setArtworkTexture(src, ratio = 1) {
@@ -380,43 +404,55 @@ function setArtworkTexture(src, ratio = 1) {
   applyMotion(motion.value);
 }
 
-function currentHeight() {
-  return parseFloat(height.value);
+function values() {
+  return {
+    x: parseFloat(offsetX.value),
+    h: parseFloat(height.value),
+    s: parseFloat(size.value),
+    r: parseFloat(yaw.value)
+  };
 }
 
-function setBase() {
-  drawing.setAttribute('position', `0 ${currentHeight().toFixed(2)} 0`);
+function updateLabels() {
+  const v = values();
+  heightVal.textContent = v.h.toFixed(1);
+  offsetXVal.textContent = v.x.toFixed(2);
+  sizeVal.textContent = v.s.toFixed(2);
+  yawVal.textContent = `${Math.round(v.r)}°`;
 }
 
 function clearAnimations() {
-  drawing.removeAttribute('animation__float');
-  drawing.removeAttribute('animation__swim');
-  drawing.removeAttribute('animation__spin');
-  drawing.removeAttribute('animation__jump');
+  artworkGroup.removeAttribute('animation__float');
+  artworkGroup.removeAttribute('animation__swim');
+  artworkGroup.removeAttribute('animation__spin');
+  artworkGroup.removeAttribute('animation__jump');
+}
+
+function setBaseTransform() {
+  const v = values();
+  updateLabels();
+  artworkGroup.setAttribute('position', `${v.x.toFixed(2)} ${v.h.toFixed(2)} 0`);
+  // 絵の縦横比を壊さないため、X/Y/Zを同じ値で拡大縮小します。
+  artworkGroup.setAttribute('scale', `${v.s.toFixed(3)} ${v.s.toFixed(3)} ${v.s.toFixed(3)}`);
+  artworkGroup.setAttribute('rotation', `0 ${v.r.toFixed(1)} 0`);
 }
 
 function applyMotion(type) {
   clearAnimations();
-  const h = currentHeight();
-  drawing.setAttribute('rotation', '-90 0 0');
-  setBase();
+  setBaseTransform();
+  const v = values();
 
-  if (type === 'float') {
-    drawing.setAttribute('animation__float', `property: position; dir: alternate; dur: 1100; easing: easeInOutSine; loop: true; to: 0 ${(h + 0.45).toFixed(2)} 0`);
-  } else if (type === 'swim') {
-    drawing.setAttribute('animation__swim', `property: position; dir: alternate; dur: 1300; easing: easeInOutSine; loop: true; to: 0.65 ${h.toFixed(2)} 0`);
-  } else if (type === 'spin') {
-    drawing.setAttribute('animation__spin', 'property: rotation; dur: 1800; easing: linear; loop: true; to: -90 360 0');
-  } else if (type === 'jump') {
-    drawing.setAttribute('animation__jump', `property: position; dir: alternate; dur: 520; easing: easeOutQuad; loop: true; to: 0 ${(h + 0.85).toFixed(2)} 0`);
+  if (type === 'still') {
+    return;
   }
-}
-
-function updateStatus(defaultMessage) {
-  if (window.__markerSeen && marker && !marker.object3D.visible) {
-    status.textContent = 'Hiroを見失いました。画像は最後の位置に残しています。';
-  } else {
-    status.textContent = defaultMessage;
+  if (type === 'float') {
+    artworkGroup.setAttribute('animation__float', `property: position; from: ${v.x.toFixed(2)} ${v.h.toFixed(2)} 0; to: ${v.x.toFixed(2)} ${(v.h + 0.45).toFixed(2)} 0; dir: alternate; dur: 1100; easing: easeInOutSine; loop: true`);
+  } else if (type === 'swim') {
+    artworkGroup.setAttribute('animation__swim', `property: position; from: ${v.x.toFixed(2)} ${v.h.toFixed(2)} 0; to: ${(v.x + 0.65).toFixed(2)} ${v.h.toFixed(2)} 0; dir: alternate; dur: 1300; easing: easeInOutSine; loop: true`);
+  } else if (type === 'spin') {
+    artworkGroup.setAttribute('animation__spin', `property: rotation; from: 0 ${v.r.toFixed(1)} 0; to: 0 ${(v.r + 360).toFixed(1)} 0; dur: 1800; easing: linear; loop: true`);
+  } else if (type === 'jump') {
+    artworkGroup.setAttribute('animation__jump', `property: position; from: ${v.x.toFixed(2)} ${v.h.toFixed(2)} 0; to: ${v.x.toFixed(2)} ${(v.h + 0.85).toFixed(2)} 0; dir: alternate; dur: 520; easing: easeOutQuad; loop: true`);
   }
 }
 
@@ -429,53 +465,34 @@ preset.addEventListener('change', async (event) => {
 });
 
 motion.addEventListener('change', event => applyMotion(event.target.value));
-
-scale.addEventListener('input', event => {
-  const s = event.target.value;
-  scaleVal.textContent = s;
-  drawing.setAttribute('scale', `${s} ${s} ${s}`);
-});
-
-height.addEventListener('input', event => {
-  heightVal.textContent = event.target.value;
-  applyMotion(motion.value);
+[height, offsetX, size, yaw].forEach(input => {
+  input.addEventListener('input', () => applyMotion(motion.value));
 });
 
 fileInput.addEventListener('change', async (event) => {
   const file = event.target.files && event.target.files[0];
   if (!file) return;
-  status.textContent = '自分の絵を読み込み中...';
   const reader = new FileReader();
   reader.onload = async () => {
     try {
       const texture = await imageToPngDataUrl(reader.result);
       setArtworkTexture(texture.dataUrl, texture.ratio);
-      status.textContent = '自分の絵を表示中。Hiroマーカーを映してください。';
     } catch (error) {
-      status.textContent = '画像を読み込めませんでした。別の画像で試してください。';
+      alert('画像を読み込めませんでした。別の画像で試してください。');
     }
   };
   reader.readAsDataURL(file);
 });
 
 resetPose.addEventListener('click', () => {
-  window.__markerSeen = false;
-  anchor.object3D.visible = false;
-  status.textContent = '表示位置をリセットしました。もう一度Hiroマーカーを映してください。';
+  window.dispatchEvent(new Event('reset-ar-pose'));
+  closeModal();
 });
 
-marker.addEventListener('markerFound', () => {
-  window.__markerSeen = true;
-  status.textContent = 'Hiroを認識中。画像を表示しています。';
+window.addEventListener('load', () => {
+  updateLabels();
+  setArtworkFromSvg('魚', fishSvg);
 });
-
-marker.addEventListener('markerLost', () => {
-  if (window.__markerSeen) {
-    status.textContent = 'Hiroを見失いました。画像は最後の位置に残しています。';
-  }
-});
-
-window.addEventListener('load', () => setArtworkFromSvg('魚', fishSvg));
 </script>
 </body>
 </html>
