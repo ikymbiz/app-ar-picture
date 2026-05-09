@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>動くお絵かきAR - Hiro Canvas版</title>
+  <title>動くお絵かきAR - Hiro Canvas録画版</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   <style>
@@ -20,12 +20,43 @@
       user-select: none;
       -webkit-user-select: none;
     }
+    #cameraPreview {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      object-fit: cover !important;
+      z-index: 0 !important;
+      display: block !important;
+      background: #000;
+    }
+    video,
+    video.arjs-video,
+    .arjs-video {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      object-fit: cover !important;
+      z-index: 0 !important;
+      display: block !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
     a-scene {
       position: fixed !important;
       inset: 0 !important;
       width: 100vw !important;
       height: 100vh !important;
-      z-index: 1;
+      z-index: 2;
+      pointer-events: none;
+      background: transparent !important;
+    }
+    a-scene canvas,
+    canvas.a-canvas {
+      background: transparent !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
     }
     #artCanvas {
       position: fixed;
@@ -244,6 +275,7 @@
   </style>
 </head>
 <body>
+  <video id="cameraPreview" autoplay muted playsinline></video>
   <canvas id="artCanvas"></canvas>
 
   <div class="record-controls" aria-label="録画操作">
@@ -357,6 +389,7 @@ const jellyfishSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height
   </g>
 </svg>`;
 
+const cameraPreview = document.getElementById('cameraPreview');
 const artCanvas = document.getElementById('artCanvas');
 const artCtx = artCanvas.getContext('2d');
 const recordCanvas = document.getElementById('recordCanvas');
@@ -400,6 +433,76 @@ const state = {
 };
 
 const tmpWorld = new THREE.Vector3();
+
+function forceTransparentArCanvas() {
+  const canvases = document.querySelectorAll('a-scene canvas, canvas.a-canvas');
+  canvases.forEach(canvas => {
+    canvas.style.background = 'transparent';
+    canvas.style.opacity = '0';
+    canvas.style.pointerEvents = 'none';
+  });
+  if (sceneEl && sceneEl.renderer) {
+    try {
+      sceneEl.renderer.setClearColor(0x000000, 0);
+      sceneEl.renderer.setClearAlpha(0);
+    } catch (error) {}
+  }
+}
+
+function findArVideo() {
+  const videos = Array.from(document.querySelectorAll('video'));
+  return videos.find(v => v !== cameraPreview && (v.srcObject || v.videoWidth || v.classList.contains('arjs-video'))) || null;
+}
+
+function styleCameraVideo(video) {
+  if (!video) return;
+  Object.assign(video.style, {
+    position: 'fixed',
+    inset: '0px',
+    width: '100vw',
+    height: '100vh',
+    objectFit: 'cover',
+    zIndex: '0',
+    display: 'block',
+    visibility: 'visible',
+    opacity: '1',
+    background: '#000'
+  });
+  video.setAttribute('playsinline', '');
+  video.muted = true;
+}
+
+function syncCameraPreview() {
+  forceTransparentArCanvas();
+  const arVideo = findArVideo();
+  styleCameraVideo(arVideo);
+  styleCameraVideo(cameraPreview);
+
+  if (arVideo && arVideo.srcObject && cameraPreview.srcObject !== arVideo.srcObject) {
+    cameraPreview.srcObject = arVideo.srcObject;
+    cameraPreview.play().catch(() => {});
+  } else if (arVideo && arVideo.src && cameraPreview.src !== arVideo.src && !cameraPreview.srcObject) {
+    cameraPreview.src = arVideo.src;
+    cameraPreview.play().catch(() => {});
+  }
+}
+
+async function ensureCameraPreviewFallback() {
+  syncCameraPreview();
+  if (cameraPreview.srcObject || cameraPreview.src) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false
+    });
+    cameraPreview.srcObject = stream;
+    await cameraPreview.play().catch(() => {});
+    showToast('カメラ表示を復旧');
+  } catch (error) {
+    showToast('カメラを許可してください');
+  }
+}
 
 function values() {
   return {
@@ -580,8 +683,13 @@ function drawOverlay(now) {
 }
 
 function getCameraVideo() {
-  const videos = Array.from(document.querySelectorAll('video'));
-  return videos.find(v => v.readyState >= 2 && v.videoWidth && v.videoHeight) || videos[0] || null;
+  syncCameraPreview();
+  if (cameraPreview.readyState >= 2 && cameraPreview.videoWidth && cameraPreview.videoHeight) {
+    return cameraPreview;
+  }
+  const arVideo = findArVideo();
+  if (arVideo && arVideo.readyState >= 2 && arVideo.videoWidth && arVideo.videoHeight) return arVideo;
+  return cameraPreview || arVideo || null;
 }
 
 function drawVideoCover(ctx, video, w, h) {
@@ -695,6 +803,16 @@ recordStop.addEventListener('click', () => {
 
 window.addEventListener('resize', resizeCanvases);
 window.addEventListener('orientationchange', () => setTimeout(resizeCanvases, 250));
+sceneEl.addEventListener('loaded', () => {
+  forceTransparentArCanvas();
+  syncCameraPreview();
+});
+sceneEl.addEventListener('renderstart', () => {
+  forceTransparentArCanvas();
+  syncCameraPreview();
+});
+window.setInterval(syncCameraPreview, 500);
+window.setTimeout(ensureCameraPreviewFallback, 1800);
 
 updateLabels();
 setPreset('fish');
