@@ -27,6 +27,29 @@
       -webkit-user-select: none;
     }
 
+
+    #cameraMirror {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      width: 100dvw !important;
+      height: 100vh !important;
+      height: 100dvh !important;
+      min-width: 100vw !important;
+      min-height: 100vh !important;
+      max-width: none !important;
+      max-height: none !important;
+      object-fit: cover !important;
+      object-position: center center !important;
+      transform: none !important;
+      z-index: 0 !important;
+      background: #000 !important;
+      pointer-events: none !important;
+    }
+    .a-enter-vr, .a-enter-vr-button {
+      display: none !important;
+    }
+
     a-scene {
       position: fixed !important;
       inset: 0 !important;
@@ -169,12 +192,7 @@
     .size-wrap {
       right: max(10px, env(safe-area-inset-right, 0px));
     }
-    .position-wrap {
-      top: calc(82px + var(--safe-top));
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 29;
-    }
+    .position-wrap { display: none !important; }
 
     .pad-title {
       display: flex;
@@ -378,13 +396,14 @@
   </style>
 </head>
 <body>
+  <video id="cameraMirror" autoplay muted playsinline webkit-playsinline></video>
   <button class="ui menu-button" id="openMenu" type="button" aria-haspopup="dialog" aria-controls="menuModal">menu</button>
   <div class="ui tiny-toast" id="toast">Hiroを認識</div>
   <div class="ui drag-hint">絵をドラッグ: 横位置 / 高さ</div>
 
   <div id="dragHitArea" aria-label="絵をドラッグして位置調整"></div>
 
-  <div class="ui pad-wrap position-wrap" aria-label="Hiro基準の位置コントロール">
+  <div class="ui pad-wrap position-wrap" aria-hidden="true" aria-label="Hiro基準の位置コントロール">
     <div class="pad-title"><span>位置 横/高さ</span><button id="resetPosition" type="button">戻す</button></div>
     <div class="pad" id="positionPad">
       <div class="pad-knob" id="positionKnob"></div>
@@ -418,7 +437,7 @@
       <div class="modal-header">
         <div>
           <h1 id="menuTitle">動くお絵かきAR</h1>
-          <p>絵はHiroマーカーに追従します。絵を直接ドラッグ、または上部の位置パッドで、Hiro基準の横位置と高さを調整できます。</p>
+          <p>絵はHiroマーカーに追従します。絵を直接ドラッグして、Hiro基準の横位置と高さを調整できます。</p>
         </div>
         <button class="close-button" id="closeMenu" type="button" aria-label="閉じる">×</button>
       </div>
@@ -575,7 +594,8 @@ const elements = {
   positionCaption: document.getElementById('positionCaption'),
   resetPosition: document.getElementById('resetPosition'),
   dragHitArea: document.getElementById('dragHitArea'),
-  toast: document.getElementById('toast')
+  toast: document.getElementById('toast'),
+  cameraMirror: document.getElementById('cameraMirror')
 };
 
 function clamp(n, min, max) {
@@ -795,8 +815,12 @@ function syncPositionKnob() {
 
 function findArVideo() {
   return document.querySelector('video#arjs-video') ||
-         document.querySelector('.arjs-video') ||
-         document.querySelector('video');
+         Array.from(document.querySelectorAll('video.arjs-video, video')).find(video => video.id !== 'cameraMirror') ||
+         null;
+}
+
+function findRecordingVideo() {
+  return findArVideo() || elements.cameraMirror || null;
 }
 
 function findArCanvas() {
@@ -812,63 +836,115 @@ function setImportantStyle(el, styles) {
   }
 }
 
+function viewportSize() {
+  const vv = window.visualViewport;
+  const w = Math.ceil(Math.max(
+    window.innerWidth || 0,
+    document.documentElement.clientWidth || 0,
+    vv ? vv.width : 0
+  ));
+  const h = Math.ceil(Math.max(
+    window.innerHeight || 0,
+    document.documentElement.clientHeight || 0,
+    vv ? vv.height : 0
+  ));
+  return { w, h };
+}
+
+function syncCameraMirror(arVideo) {
+  const mirror = elements.cameraMirror;
+  if (!mirror || !arVideo) return;
+
+  try {
+    if (arVideo.srcObject && mirror.srcObject !== arVideo.srcObject) {
+      mirror.srcObject = arVideo.srcObject;
+    } else if (!arVideo.srcObject && arVideo.src && mirror.src !== arVideo.src) {
+      mirror.src = arVideo.src;
+    }
+    mirror.muted = true;
+    mirror.playsInline = true;
+    mirror.setAttribute('playsinline', 'true');
+    mirror.setAttribute('webkit-playsinline', 'true');
+    const playResult = mirror.play();
+    if (playResult && typeof playResult.catch === 'function') playResult.catch(() => {});
+  } catch (_) {}
+}
+
 function forceFullscreenLayers() {
-  const viewportW = `${window.innerWidth}px`;
-  const viewportH = `${window.innerHeight}px`;
-  const common = {
+  const { w, h } = viewportSize();
+  const full = {
     position: 'fixed',
-    left: '0',
-    top: '0',
+    left: '0px',
+    top: '0px',
     right: 'auto',
     bottom: 'auto',
-    width: '100vw',
-    height: '100vh',
-    'min-width': '100vw',
-    'min-height': '100vh',
+    width: `${w}px`,
+    height: `${h}px`,
+    'min-width': `${w}px`,
+    'min-height': `${h}px`,
     'max-width': 'none',
     'max-height': 'none',
-    transform: 'none',
-    margin: '0'
+    margin: '0',
+    transform: 'none'
   };
 
   setImportantStyle(elements.scene, {
-    position: 'fixed',
-    left: '0',
-    top: '0',
-    width: '100vw',
-    height: '100vh',
+    ...full,
     overflow: 'hidden',
-    background: 'transparent'
+    background: 'transparent',
+    'z-index': '1'
   });
 
-  const video = findArVideo();
-  if (video) {
-    setImportantStyle(video, {
-      ...common,
-      'object-fit': 'cover',
-      'object-position': 'center center',
-      'z-index': '0',
-      background: '#000'
-    });
+  const arVideo = findArVideo();
+  syncCameraMirror(arVideo);
+
+  // AR.js の内部 video はトラッキング用に残しつつ、表示は cameraMirror だけにします。
+  // これで AR.js 側の contain 表示や計算幅による右端の黒帯を避けます。
+  for (const video of document.querySelectorAll('video')) {
     video.setAttribute('playsinline', 'true');
     video.setAttribute('webkit-playsinline', 'true');
+    if (video.id === 'cameraMirror') {
+      setImportantStyle(video, {
+        ...full,
+        'object-fit': 'cover',
+        'object-position': 'center center',
+        'z-index': '0',
+        opacity: '1',
+        visibility: 'visible',
+        background: '#000',
+        'pointer-events': 'none'
+      });
+    } else {
+      setImportantStyle(video, {
+        ...full,
+        'object-fit': 'cover',
+        'object-position': 'center center',
+        'z-index': '-2',
+        opacity: '0',
+        visibility: 'hidden',
+        background: 'transparent',
+        'pointer-events': 'none'
+      });
+    }
   }
 
-  const canvas = findArCanvas();
-  if (canvas) {
+  for (const canvas of document.querySelectorAll('canvas')) {
+    if (canvas.id === 'recordCanvas') continue;
     setImportantStyle(canvas, {
-      ...common,
+      ...full,
       'object-fit': 'cover',
       'object-position': 'center center',
       'z-index': '2',
-      background: 'transparent'
+      background: 'transparent',
+      'pointer-events': 'none'
     });
   }
 
   if (elements.scene && elements.scene.renderer) {
     try {
-      elements.scene.renderer.setSize(window.innerWidth, window.innerHeight, false);
-      elements.scene.renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+      elements.scene.renderer.setSize(w, h, false);
+      elements.scene.renderer.setViewport(0, 0, w, h);
+      elements.scene.renderer.setClearColor(0x000000, 0);
     } catch (_) {}
   }
 }
@@ -1000,7 +1076,7 @@ function pickRecordingMime() {
 
 async function startRecording() {
   if (state.recording) return;
-  const arVideo = findArVideo();
+  const arVideo = findRecordingVideo();
   const arCanvas = findArCanvas();
 
   if (!arVideo || !arCanvas) {
