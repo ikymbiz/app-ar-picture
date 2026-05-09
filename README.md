@@ -9,7 +9,7 @@
 2. GitHubの `Settings` → `Pages`
 3. `Deploy from a branch` を選び、`main` / `/root` を公開元にする
 4. 表示されたURLをスマホで開く
-5. Hiroマーカーを印刷または別画面に表示
+5. `hiro-marker-print.html` を開いてHiroマーカーを印刷
 6. アプリで自分の絵の画像を選んで、カメラをマーカーに向ける
 
 ## 注意
@@ -17,3 +17,16 @@
 - カメラ利用のため、GitHub PagesなどのHTTPS環境で開いてください。
 - iPhone Safariは通常のWebXR ARに対応していないため、マーカーAR方式にしています。
 - 自分の絵の背景を透明PNGにすると、より自然に見えます。
+
+
+## 印刷用Hiroマーカー
+
+`hiro-marker-print.html` をブラウザで開き、A4用紙に印刷してください。
+印刷時は「ページに合わせる」または倍率100%を推奨します。
+マーカーは折り曲げず、明るい場所でカメラに映してください。
+
+## ファイル構成
+
+- `index.html` — ARアプリ本体
+- `hiro-marker-print.html` — 印刷用Hiroマーカー
+- `README.md` — 使い方
