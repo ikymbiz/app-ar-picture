@@ -501,8 +501,8 @@
           <a class="primary-link" href="hiro-marker-print.html" target="_blank" rel="noopener">Hiroを印刷</a>
           <button class="danger" id="resetAll" type="button">全部リセット</button>
         </div>
-        <p class="small">録画は下部中央のボタンで開始・停止します。録画中も、回転・高さ・大きさ・位置の調整を続けられます。停止後、自動で保存されます。録画にUIは入りません。</p>
-        <p class="small">Androidで見やすいMP4保存を優先します。直接MP4録画できない場合は、内部録画をMP4へ変換して保存します。マイク許可を出すと音声も入ります。</p>
+        <p class="small">録画は下部中央のボタンで開始・停止します。録画中も、回転・高さ・大きさ・位置の調整を続けられます。停止後、自動でMP4が保存されます。録画にUIは入りません。</p>
+        <p class="small">録画にはマイクの許可が必要です(音声入り)。MP4録画に対応していない端末では録画ボタンが無効になります。iPhoneのSafari、または最新のAndroid Chromeをお使いください。</p>
       </div>
     </section>
   </div>
@@ -591,13 +591,7 @@ const state = {
   micStream: null,
   recordLoop: 0,
   recordMime: '',
-  recordExt: 'mp4',
-  rawRecordExt: 'mp4',
-  needsMp4Convert: false,
-  ffmpegInstance: null,
-  ffmpegLoading: null,
-  stopRequested: false,
-  unexpectedRestartCount: 0,
+  recordSupported: false,
   recordStartAt: 0,
   lastToastAt: 0,
   motion: 'float'
@@ -1132,127 +1126,51 @@ function drawContainOverlay(ctx, source, canvasWidth, canvasHeight) {
   ctx.drawImage(source, 0, 0, sw, sh, 0, 0, canvasWidth, canvasHeight);
 }
 
-function pickRecordingMime() {
-  // Androidで見やすいよう、保存ファイルはMP4を最優先にします。
-  // 直接MP4録画できないブラウザでは、内部的にWebMで録画してからMP4へ変換します。
+function detectMp4Support() {
+  // ネイティブにMP4録画できる端末でだけ録画を許可します。
+  // 対応端末では音声と映像をそのままMP4に書き出して保存します。
   const mp4Types = [
     'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
     'video/mp4;codecs=h264,aac',
     'video/mp4'
   ];
-  const webmTypes = [
-    'video/webm;codecs=vp8,opus',
-    'video/webm;codecs=vp9,opus',
-    'video/webm'
-  ];
-
-  const directMp4 = mp4Types.find(type => window.MediaRecorder && MediaRecorder.isTypeSupported(type));
-  if (directMp4) {
-    state.recordMime = directMp4;
-    state.rawRecordExt = 'mp4';
-    state.recordExt = 'mp4';
-    state.needsMp4Convert = false;
-    return;
-  }
-
-  const internalWebm = webmTypes.find(type => window.MediaRecorder && MediaRecorder.isTypeSupported(type));
-  state.recordMime = internalWebm || '';
-  state.rawRecordExt = internalWebm ? 'webm' : 'mp4';
-  state.recordExt = 'mp4';
-  state.needsMp4Convert = !!internalWebm;
+  if (!window.MediaRecorder) return '';
+  return mp4Types.find(type => MediaRecorder.isTypeSupported(type)) || '';
 }
 
-function loadScriptOnce(src) {
-  return new Promise((resolve, reject) => {
-    const existing = Array.from(document.scripts).find(script => script.src === src);
-    if (existing) {
-      if (existing.dataset.loaded === 'true') resolve();
-      else {
-        existing.addEventListener('load', resolve, { once: true });
-        existing.addEventListener('error', reject, { once: true });
-      }
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = src;
-    script.async = true;
-    script.onload = () => {
-      script.dataset.loaded = 'true';
-      resolve();
-    };
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-}
 
-async function getFfmpeg() {
-  if (state.ffmpegInstance) return state.ffmpegInstance;
-  if (state.ffmpegLoading) return state.ffmpegLoading;
-
-  state.ffmpegLoading = (async () => {
-    await loadScriptOnce('https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js');
-    const { createFFmpeg } = window.FFmpeg || {};
-    if (!createFFmpeg) throw new Error('ffmpeg.wasm を読み込めませんでした');
-
-    const ffmpeg = createFFmpeg({
-      log: false,
-      corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
-    });
-    await ffmpeg.load();
-    state.ffmpegInstance = ffmpeg;
-    return ffmpeg;
-  })();
-
-  return state.ffmpegLoading;
-}
-
-function blobToUint8Array(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(new Uint8Array(reader.result));
-    reader.onerror = reject;
-    reader.readAsArrayBuffer(blob);
-  });
-}
-
-async function convertWebmBlobToMp4(webmBlob) {
-  elements.recordLabel.textContent = 'MP4変換中';
-  showToast('MP4に変換中');
-  const ffmpeg = await getFfmpeg();
-  const stamp = Date.now();
-  const input = `input-${stamp}.webm`;
-  const output = `output-${stamp}.mp4`;
-  const inputData = await blobToUint8Array(webmBlob);
-
-  ffmpeg.FS('writeFile', input, inputData);
-  try {
-    // まず互換性重視のMP4変換を試します。
-    await ffmpeg.run('-i', input, '-movflags', 'faststart', '-pix_fmt', 'yuv420p', output);
-  } catch (error) {
-    // 端末によって上のオプションが失敗する場合があるため、最小指定でもう一度試します。
-    try { await ffmpeg.run('-i', input, output); }
-    catch (secondError) { throw secondError; }
-  }
-
-  const mp4Data = ffmpeg.FS('readFile', output);
-  try { ffmpeg.FS('unlink', input); } catch (_) {}
-  try { ffmpeg.FS('unlink', output); } catch (_) {}
-  return new Blob([mp4Data.buffer], { type: 'video/mp4' });
-}
 
 async function startRecording() {
   if (state.recording) return;
+
+  // ネイティブMP4録画に対応していない端末では録画できません。
+  if (!state.recordMime) {
+    alert('このブラウザではMP4録画に対応していません。iPhoneのSafari、または最新のAndroid Chromeで開いてください。');
+    return;
+  }
+
   const arVideo = findRecordingVideo();
   const arCanvas = findArCanvas();
-
   if (!arVideo || !arCanvas) {
     alert('録画に必要なAR映像が見つかりません。ページを再読み込みしてから試してください。');
     return;
   }
 
-  pickRecordingMime();
-  state.stopRequested = false;
-  state.unexpectedRestartCount = 0;
+  // マイクは必須です。許可されない場合は録画を始めません。
+  let micStream = null;
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch (_) {
+    alert('マイクの使用が許可されませんでした。ブラウザの設定からマイクを許可してください。');
+    return;
+  }
+  const liveAudio = micStream.getAudioTracks().some(track => track.readyState === 'live');
+  if (!liveAudio) {
+    micStream.getTracks().forEach(track => track.stop());
+    alert('マイクから音声を取得できませんでした。別のブラウザで試してください。');
+    return;
+  }
+
   state.recordStartAt = performance.now();
 
   const w = Math.min(1280, Math.max(640, window.innerWidth));
@@ -1272,18 +1190,10 @@ async function startRecording() {
   renderFrame();
 
   const videoStream = elements.recordCanvas.captureStream(30);
-  const tracks = [...videoStream.getVideoTracks()];
-
-  try {
-    state.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    tracks.push(...state.micStream.getAudioTracks());
-  } catch (_) {
-    state.micStream = null;
-  }
-
+  const tracks = [...videoStream.getVideoTracks(), ...micStream.getAudioTracks()];
+  state.micStream = micStream;
   state.mixedStream = new MediaStream(tracks);
   state.chunks = [];
-  state.recording = true;
 
   const cleanupStreams = () => {
     if (state.micStream) state.micStream.getTracks().forEach(track => track.stop());
@@ -1298,35 +1208,38 @@ async function startRecording() {
     elements.recordLabel.textContent = '録画開始';
   };
 
-  const finishAndDownload = async () => {
+  try {
+    state.recorder = new MediaRecorder(state.mixedStream, { mimeType: state.recordMime });
+  } catch (error) {
+    stopped = true;
+    cancelAnimationFrame(state.recordLoop);
+    cleanupStreams();
+    alert('このブラウザでは録画を開始できませんでした。別のブラウザで試してください。');
+    return;
+  }
+
+  state.recorder.ondataavailable = event => {
+    if (event.data && event.data.size > 0) state.chunks.push(event.data);
+  };
+
+  state.recorder.onstop = () => {
     stopped = true;
     cancelAnimationFrame(state.recordLoop);
 
-    const rawMime = state.recordMime || (state.rawRecordExt === 'webm' ? 'video/webm' : 'video/mp4');
-    const rawBlob = new Blob(state.chunks, { type: rawMime });
-    let blob = rawBlob;
-    let ext = state.rawRecordExt;
-
-    if (state.needsMp4Convert) {
-      try {
-        blob = await convertWebmBlobToMp4(rawBlob);
-        ext = 'mp4';
-      } catch (error) {
-        console.error(error);
-        cleanupStreams();
-        state.recording = false;
-        state.stopRequested = false;
-        resetRecordUi();
-        alert('このブラウザではMP4変換に失敗しました。別のブラウザ、または録画時間を短くして試してください。');
-        return;
-      }
+    if (state.chunks.length === 0) {
+      cleanupStreams();
+      state.recording = false;
+      resetRecordUi();
+      alert('録画データを取得できませんでした。もう一度お試しください。');
+      return;
     }
 
+    const blob = new Blob(state.chunks, { type: 'video/mp4' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     a.href = url;
-    a.download = `ar-drawing-${stamp}.${ext}`;
+    a.download = `ar-drawing-${stamp}.mp4`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1334,64 +1247,12 @@ async function startRecording() {
 
     cleanupStreams();
     state.recording = false;
-    state.stopRequested = false;
     resetRecordUi();
   };
 
-  const failRecording = (message) => {
-    stopped = true;
-    cancelAnimationFrame(state.recordLoop);
-    cleanupStreams();
-    state.recording = false;
-    state.stopRequested = false;
-    resetRecordUi();
-    if (message) showToast(message);
-  };
-
-  const startRecorderInstance = () => {
-    if (!state.mixedStream || !state.mixedStream.getTracks().some(track => track.readyState === 'live')) {
-      failRecording('録画を継続できませんでした');
-      return false;
-    }
-
-    try {
-      const options = state.recordMime ? { mimeType: state.recordMime } : {};
-      state.recorder = new MediaRecorder(state.mixedStream, options);
-    } catch (error) {
-      failRecording('このブラウザでは録画を開始できませんでした');
-      alert('このブラウザでは録画を開始できませんでした。別のブラウザで試してください。');
-      return false;
-    }
-
-    state.recorder.ondataavailable = event => {
-      if (event.data && event.data.size > 0) state.chunks.push(event.data);
-    };
-
-    state.recorder.onerror = () => {
-      // error 後に onstop が呼ばれるブラウザがあるため、ここでは終了処理をしません。
-      // onstop 側で、停止ボタン由来かどうかを判定します。
-    };
-
-    state.recorder.onstop = () => {
-      if (!state.stopRequested && state.recording) {
-        // ブラウザ都合で MediaRecorder が止まった場合でも、ユーザーが停止を押すまでは録画を続けます。
-        state.unexpectedRestartCount += 1;
-        showToast('録画を継続中');
-        setTimeout(() => {
-          if (state.recording && !state.stopRequested) startRecorderInstance();
-        }, 120);
-        return;
-      }
-
-      finishAndDownload();
-    };
-
-    // 小さなチャンクを定期的に吐かせると、Android Chrome で短時間停止しにくくなります。
-    state.recorder.start(1000);
-    return true;
-  };
-
-  if (!startRecorderInstance()) return;
+  // 短いチャンクで定期的にデータを吐かせ、停止時の取りこぼしを防ぎます。
+  state.recorder.start(1000);
+  state.recording = true;
 
   // 録画中も各UIをそのまま操作できるよう、調整UIは無効化しません。
   elements.recordButton.classList.add('recording');
@@ -1403,7 +1264,6 @@ function stopRecording() {
   if (!state.recording || !state.recorder) return;
   // 誤タップやブラウザの連続clickで即停止しないよう、開始直後は停止を無視します。
   if (performance.now() - state.recordStartAt < 800) return;
-  state.stopRequested = true;
   if (state.recorder.state !== 'inactive') {
     try { state.recorder.requestData(); } catch (_) {}
     state.recorder.stop();
@@ -1418,6 +1278,19 @@ elements.recordButton.addEventListener('click', () => {
   }
 });
 
+function applyRecordSupport() {
+  state.recordMime = detectMp4Support();
+  state.recordSupported = !!state.recordMime;
+  if (!state.recordSupported) {
+    elements.recordButton.disabled = true;
+    elements.recordButton.style.opacity = '0.45';
+    elements.recordButton.style.cursor = 'not-allowed';
+    elements.recordButton.setAttribute('aria-label', 'このブラウザでは録画できません');
+    elements.recordLabel.textContent = '録画は非対応';
+    elements.recordButton.title = 'iPhoneのSafariまたは最新のAndroid Chromeで開いてください';
+  }
+}
+
 window.addEventListener('resize', forceFullscreenLayers);
 window.addEventListener('load', () => {
   updateArtTransform();
@@ -1425,6 +1298,7 @@ window.addEventListener('load', () => {
   syncRotationKnob();
   syncSizeKnob();
   syncPositionKnob();
+  applyRecordSupport();
   markerVisibilityLoop();
 });
 </script>
