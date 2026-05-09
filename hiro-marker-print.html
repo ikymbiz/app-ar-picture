@@ -5,73 +5,81 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Hiroマーカー印刷</title>
   <style>
-    @page { size: A4; margin: 0; }
+    @page { size: A4 portrait; margin: 0; }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: grid;
+      place-items: center;
       background: #f3f4f6;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: #111827;
     }
-    .toolbar {
-      position: sticky;
-      top: 0;
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      justify-content: center;
-      padding: 14px;
-      background: white;
-      border-bottom: 1px solid #e5e7eb;
-      z-index: 2;
-    }
-    button {
-      border: 0;
-      border-radius: 999px;
-      padding: 10px 14px;
-      color: white;
-      background: #2563eb;
-      font-weight: 800;
-      cursor: pointer;
-    }
-    .page {
+    .sheet {
       width: 210mm;
       height: 297mm;
-      margin: 16px auto;
       background: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 10px 30px rgba(0,0,0,.12);
+      display: grid;
+      place-items: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,.18);
+      position: relative;
     }
-    .marker-wrap {
+    .marker {
       width: 79mm;
       height: 79mm;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border: 0.25mm dashed #cbd5e1;
+      display: grid;
+      place-items: center;
+      border: 0;
     }
-    img { width: 72mm; height: 72mm; display: block; }
-    .note { text-align: center; font-size: 13px; color: #4b5563; padding-bottom: 20px; }
+    .marker img {
+      width: 79mm;
+      height: 79mm;
+      display: block;
+    }
+    .controls {
+      position: fixed;
+      left: 16px;
+      top: 16px;
+      display: flex;
+      gap: 8px;
+    }
+    button, a {
+      border: 0;
+      border-radius: 999px;
+      background: #111827;
+      color: white;
+      padding: 10px 14px;
+      font-weight: 800;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .note {
+      position: absolute;
+      bottom: 22mm;
+      left: 20mm;
+      right: 20mm;
+      text-align: center;
+      font-size: 12px;
+      color: #4b5563;
+    }
     @media print {
       body { background: white; }
-      .toolbar, .note { display: none; }
-      .page { margin: 0; box-shadow: none; width: 210mm; height: 297mm; }
+      .sheet { box-shadow: none; }
+      .controls { display: none; }
     }
   </style>
 </head>
 <body>
-  <div class="toolbar">
+  <div class="controls">
     <button onclick="window.print()">印刷する</button>
-    <span>A4の約1/8サイズ / 印刷設定は100%推奨</span>
+    <a href="index.html">ARに戻る</a>
   </div>
-  <main class="page">
-    <div class="marker-wrap">
-      <img alt="Hiro AR marker" src="https://raw.githubusercontent.com/AR-js-org/AR.js/master/data/images/hiro.png" />
+  <main class="sheet">
+    <div class="marker">
+      <img src="https://raw.githubusercontent.com/AR-js-org/AR.js/master/data/images/hiro.png" alt="Hiro marker">
     </div>
+    <div class="note">A4面積の約1/8サイズです。印刷設定は「実際のサイズ」または「100%」にしてください。</div>
   </main>
-  <p class="note">紙が曲がると認識しにくいので、平らに置いて使ってください。</p>
 </body>
 </html>
