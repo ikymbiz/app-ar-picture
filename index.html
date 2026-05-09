@@ -3,15 +3,20 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>動くお絵かきAR - Hiro追従録画版</title>
+  <title>動くお絵かきAR</title>
+
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+
   <style>
-    :root { color-scheme: dark; }
+    :root {
+      color-scheme: dark;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-top: env(safe-area-inset-top, 0px);
+    }
     * { box-sizing: border-box; }
     html, body {
       margin: 0;
-      padding: 0;
       width: 100%;
       height: 100%;
       overflow: hidden;
@@ -22,263 +27,237 @@
       -webkit-user-select: none;
     }
 
-    video,
-    #arjs-video,
-    .arjs-video,
-    body > video {
-      position: fixed !important;
-      top: 0 !important;
-      left: 0 !important;
-      width: 100vw !important;
-      height: 100vh !important;
-      min-width: 100vw !important;
-      min-height: 100vh !important;
-      max-width: none !important;
-      max-height: none !important;
-      object-fit: cover !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      transform: none !important;
-      z-index: 0 !important;
-      display: block !important;
-      visibility: visible !important;
-      opacity: 1 !important;
-      background: #000 !important;
-    }
-
     a-scene {
       position: fixed !important;
       inset: 0 !important;
       width: 100vw !important;
       height: 100vh !important;
-      z-index: 10 !important;
-      pointer-events: none !important;
-      background: transparent !important;
+      z-index: 1 !important;
+      overflow: hidden !important;
     }
-    a-scene canvas,
     canvas.a-canvas {
       position: fixed !important;
       inset: 0 !important;
       width: 100vw !important;
       height: 100vh !important;
-      background: transparent !important;
-      opacity: 1 !important;
-      pointer-events: none !important;
-      z-index: 10 !important;
+      z-index: 2 !important;
+      object-fit: cover !important;
     }
-    .a-enter-vr, .a-orientation-modal, .rs-base, .a-loader-title {
-      display: none !important;
-      visibility: hidden !important;
-      opacity: 0 !important;
+    video {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      object-fit: cover !important;
+      z-index: 0 !important;
+      background: #000 !important;
+    }
+
+    .ui {
+      position: fixed;
+      z-index: 20;
+      color: #fff;
+      text-shadow: 0 2px 6px rgba(0,0,0,.85);
     }
 
     .menu-button {
-      position: fixed;
-      top: calc(env(safe-area-inset-top, 0px) + 12px);
-      right: calc(env(safe-area-inset-right, 0px) + 12px);
-      z-index: 1000;
-      border: 0;
+      top: calc(10px + var(--safe-top));
+      right: 12px;
+      border: 1px solid rgba(255,255,255,.28);
       border-radius: 999px;
       padding: 10px 15px;
-      font-weight: 900;
+      font-weight: 850;
+      letter-spacing: .02em;
       color: #111;
       background: rgba(255,255,255,.92);
       box-shadow: 0 8px 24px rgba(0,0,0,.28);
       cursor: pointer;
-      touch-action: manipulation;
+      text-shadow: none;
     }
 
-    .top-controls {
-      position: fixed;
-      top: calc(env(safe-area-inset-top, 0px) + 12px);
-      left: calc(env(safe-area-inset-left, 0px) + 12px);
-      right: calc(env(safe-area-inset-right, 0px) + 98px);
-      z-index: 900;
-      display: grid;
-      gap: 6px;
-      color: #fff;
-      background: transparent;
-      text-shadow: 0 2px 7px rgba(0,0,0,.95), 0 0 2px rgba(0,0,0,1);
-      pointer-events: auto;
+    .tiny-toast {
+      top: calc(12px + var(--safe-top));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 35;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .02em;
+      background: rgba(0,0,0,.38);
+      color: rgba(255,255,255,.82);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease;
     }
-    .caption {
+    .tiny-toast.show { opacity: 1; }
+
+    .record-ui {
+      left: 50%;
+      bottom: calc(20px + var(--safe-bottom));
+      transform: translateX(-50%);
+      z-index: 32;
       display: flex;
-      justify-content: space-between;
-      gap: 8px;
-      font-size: 12px;
-      font-weight: 900;
-      opacity: .92;
-    }
-    .h-control {
-      display: grid;
-      grid-template-columns: 56px minmax(100px, 1fr) 44px;
+      flex-direction: column;
       align-items: center;
-      gap: 8px;
-      font-size: 12px;
+      gap: 5px;
+      text-align: center;
+    }
+    .record-button {
+      position: relative;
+      width: 76px;
+      height: 76px;
+      padding: 0;
+      border: 5px solid rgba(255,255,255,.95);
+      border-radius: 999px;
+      background: rgba(0,0,0,.16);
+      box-shadow: 0 8px 26px rgba(0,0,0,.34);
+      cursor: pointer;
+      text-shadow: none;
+    }
+    .record-button::before {
+      content: "";
+      position: absolute;
+      inset: 13px;
+      border-radius: 999px;
+      background: #ef1f1f;
+      transition: all .16s ease;
+    }
+    .record-button.recording::before {
+      inset: 20px;
+      border-radius: 8px;
+      background: #ef1f1f;
+    }
+    .record-label {
+      font-size: 11px;
       font-weight: 850;
+      opacity: .9;
     }
-    .h-control input { width: 100%; }
-    .h-control b { text-align: right; font-variant-numeric: tabular-nums; }
 
-    .right-height-control {
-      position: fixed;
-      top: calc(env(safe-area-inset-top, 0px) + 88px);
-      right: calc(env(safe-area-inset-right, 0px) + 10px);
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 138px);
-      z-index: 900;
-      width: 52px;
-      display: grid;
-      justify-items: center;
-      align-items: center;
-      grid-template-rows: auto 1fr auto;
-      gap: 6px;
-      color: #fff;
-      font-size: 12px;
-      font-weight: 900;
-      background: transparent;
+    .pad-wrap {
+      bottom: calc(24px + var(--safe-bottom));
+      width: 126px;
+      z-index: 28;
       pointer-events: auto;
-      text-shadow: 0 2px 7px rgba(0,0,0,.95), 0 0 2px rgba(0,0,0,1);
     }
-    .right-height-control input[type="range"] {
-      width: 34px;
-      height: min(54vh, 360px);
-      writing-mode: vertical-lr;
-      direction: rtl;
-      -webkit-appearance: slider-vertical;
-      appearance: slider-vertical;
-      accent-color: #93c5fd;
+    .rotate-wrap {
+      left: max(10px, env(safe-area-inset-left, 0px));
     }
-    .right-height-control b { font-variant-numeric: tabular-nums; }
+    .size-wrap {
+      right: max(10px, env(safe-area-inset-right, 0px));
+    }
 
-    input[type="range"] {
-      accent-color: #93c5fd;
+    .pad-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      margin-bottom: 4px;
+      font-size: 11px;
+      font-weight: 850;
+      opacity: .95;
+    }
+    .pad-title button {
+      border: 0;
+      border-radius: 999px;
+      padding: 3px 7px;
+      font-size: 10px;
+      font-weight: 850;
+      background: rgba(255,255,255,.9);
+      color: #111;
+      cursor: pointer;
+      text-shadow: none;
+    }
+    .pad {
+      position: relative;
+      width: 126px;
+      height: 126px;
+      border-radius: 24px;
+      border: 1px solid rgba(255,255,255,.32);
+      background: rgba(0,0,0,.18);
+      backdrop-filter: blur(3px);
+      box-shadow: 0 12px 30px rgba(0,0,0,.30);
+      overflow: hidden;
       touch-action: none;
     }
-
-    .record-dock {
-      position: fixed;
-      left: 50%;
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
-      transform: translateX(-50%);
-      z-index: 1100;
-      display: grid;
-      place-items: center;
-      gap: 6px;
-      pointer-events: auto;
-      color: #fff;
-      text-shadow: 0 2px 6px rgba(0,0,0,.75);
-    }
-    .record-main {
-      position: relative;
-      width: 78px;
-      height: 78px;
-      border-radius: 999px;
-      border: 5px solid rgba(255,255,255,.96);
-      background: rgba(255,255,255,.22);
-      box-shadow: 0 10px 34px rgba(0,0,0,.35);
-      cursor: pointer;
-      touch-action: manipulation;
-      padding: 0;
-      display: block;
-    }
-    .record-main::before {
+    .pad::before, .pad::after {
       content: "";
+      position: absolute;
+      background: rgba(255,255,255,.20);
+      pointer-events: none;
+    }
+    .pad::before {
+      left: 50%;
+      top: 10px;
+      bottom: 10px;
+      width: 1px;
+    }
+    .pad::after {
+      top: 50%;
+      left: 10px;
+      right: 10px;
+      height: 1px;
+    }
+    .pad-knob {
       position: absolute;
       left: 50%;
       top: 50%;
-      width: 54px;
-      height: 54px;
+      width: 26px;
+      height: 26px;
+      border-radius: 999px;
       transform: translate(-50%, -50%);
-      border-radius: 999px;
-      background: #ef4444;
-      transition: width 140ms ease, height 140ms ease, border-radius 140ms ease, opacity 140ms ease;
-      box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
+      border: 2px solid rgba(255,255,255,.95);
+      background: rgba(255,255,255,.32);
+      box-shadow: 0 5px 18px rgba(0,0,0,.42);
+      pointer-events: none;
     }
-    .record-main.recording::before {
-      width: 30px;
-      height: 30px;
-      border-radius: 7px;
-      animation: recPulse 900ms ease-in-out infinite alternate;
-    }
-    @keyframes recPulse { from { opacity:.68; } to { opacity:1; } }
-    .record-label {
-      min-height: 16px;
-      font-size: 12px;
-      font-weight: 900;
-      letter-spacing: .02em;
-    }
-
-    .bottom-control,
-    .bottom-stack {
-      position: fixed;
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 32px);
-      z-index: 1050;
-      color: #fff;
-      font-size: 12px;
-      font-weight: 900;
+    .pad-caption {
+      margin-top: 4px;
+      min-height: 15px;
+      font-size: 10px;
+      font-weight: 800;
       text-align: center;
-      pointer-events: auto;
-      text-shadow: 0 2px 7px rgba(0,0,0,.95), 0 0 2px rgba(0,0,0,1);
+      opacity: .9;
     }
-    .bottom-control {
-      width: min(30vw, 150px);
-      min-width: 98px;
-      display: grid;
-      gap: 4px;
-    }
-    .bottom-control.right {
-      left: calc(50% + 52px);
-    }
-    .bottom-stack.left {
-      right: calc(50% + 52px);
-      width: min(34vw, 170px);
-      min-width: 116px;
-      display: grid;
-      gap: 8px;
-    }
-    .bottom-control input,
-    .bottom-stack input { width: 100%; }
-    .bottom-control b,
-    .bottom-stack b { font-variant-numeric: tabular-nums; }
-    .stack-control {
-      display: grid;
-      grid-template-columns: 42px 1fr 38px;
-      align-items: center;
-      gap: 5px;
-      text-align: left;
-    }
-    .stack-control b { text-align: right; }
 
-    .save-video {
-      display: none;
+    #dragHitArea {
       position: fixed;
-      left: 50%;
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 104px);
-      transform: translateX(-50%);
-      z-index: 1101;
-      padding: 8px 13px;
-      border-radius: 999px;
-      color: #111;
-      background: rgba(255,255,255,.94);
-      text-decoration: none;
-      font-size: 13px;
-      font-weight: 900;
-      box-shadow: 0 8px 24px rgba(0,0,0,.32);
+      z-index: 8;
+      display: none;
+      background: transparent;
+      border-radius: 14px;
+      touch-action: none;
       pointer-events: auto;
     }
-    .save-video.ready { display: inline-flex; }
+    #dragHitArea.dragging {
+      border: 1px dashed rgba(255,255,255,.65);
+      background: rgba(255,255,255,.03);
+    }
+    .drag-hint {
+      left: 50%;
+      top: calc(56px + var(--safe-top));
+      transform: translateX(-50%);
+      font-size: 11px;
+      font-weight: 850;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(0,0,0,.22);
+      opacity: .72;
+      pointer-events: none;
+      white-space: nowrap;
+    }
 
     .modal-backdrop {
       position: fixed;
       inset: 0;
-      z-index: 1200;
+      z-index: 45;
       display: none;
       align-items: center;
       justify-content: center;
       padding: 18px;
-      background: rgba(0,0,0,.52);
+      background: rgba(0,0,0,.55);
       backdrop-filter: blur(5px);
-      -webkit-backdrop-filter: blur(5px);
     }
     .modal-backdrop.open { display: flex; }
     .modal {
@@ -286,15 +265,46 @@
       max-height: min(82vh, 720px);
       overflow: auto;
       color: #fff;
-      background: rgba(14,14,18,.95);
+      background: rgba(14,14,18,.94);
       border: 1px solid rgba(255,255,255,.18);
       border-radius: 22px;
-      box-shadow: 0 20px 70px rgba(0,0,0,.44);
+      box-shadow: 0 20px 70px rgba(0,0,0,.42);
       padding: 18px;
     }
-    .modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .modal-header {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
     h1 { margin: 0 0 6px; font-size: 20px; }
     p { margin: 6px 0; font-size: 13px; line-height: 1.55; opacity: .9; }
+    .section {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,.12);
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      align-items: center;
+    }
+    button, label.btn, select {
+      border: 0;
+      border-radius: 999px;
+      padding: 9px 12px;
+      font-weight: 750;
+      background: #fff;
+      color: #111;
+      cursor: pointer;
+      text-shadow: none;
+    }
+    label.btn { display: inline-flex; align-items: center; }
+    input[type=file] { display: none; }
+    select { min-width: 112px; }
+    .small { font-size: 12px; opacity: .82; }
     .close-button {
       border: 0;
       border-radius: 999px;
@@ -308,122 +318,63 @@
       cursor: pointer;
       flex: none;
     }
-    .section { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.12); }
-    .row { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; }
-    button, label.btn, select, .primary-link {
-      border: 0;
+    .primary-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       border-radius: 999px;
       padding: 9px 12px;
+      background: #1d4ed8;
+      color: white;
+      text-decoration: none;
       font-weight: 800;
-      background: #fff;
-      color: #111;
-      cursor: pointer;
     }
-    .primary-link { background: #2563eb; color: white; text-decoration: none; }
-    .ghost-button { background: #e5e7eb; }
-    label.btn { display: inline-flex; align-items: center; }
-    input[type=file] { display: none; }
-    select { min-width: 118px; }
-    .small { font-size: 12px; opacity: .82; }
+    .danger { background: #e5e7eb; }
 
-    #toast {
-      position: fixed;
-      top: calc(env(safe-area-inset-top, 0px) + 64px);
-      left: 50%;
-      z-index: 1150;
-      max-width: 250px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      color: rgba(255,255,255,.92);
-      background: rgba(0,0,0,.32);
-      border: 1px solid rgba(255,255,255,.10);
-      font-size: 11px;
-      font-weight: 800;
-      line-height: 1.2;
-      pointer-events: none;
-      opacity: 0;
-      transform: translate(-50%, -4px);
-      transition: opacity 220ms ease, transform 220ms ease;
-      text-shadow: 0 1px 3px rgba(0,0,0,.65);
-    }
-    #toast.show { opacity: .68; transform: translate(-50%, 0); }
     #recordCanvas { display: none; }
 
-    @media (max-width: 520px) {
-      .top-controls { right: calc(env(safe-area-inset-right, 0px) + 88px); }
-      .h-control { grid-template-columns: 48px minmax(64px, 1fr) 38px; gap: 6px; }
-      .right-height-control { width: 48px; right: calc(env(safe-area-inset-right, 0px) + 5px); }
-      .right-height-control input[type="range"] { height: min(52vh, 320px); }
-      .record-main { width: 72px; height: 72px; }
-      .record-main::before { width: 50px; height: 50px; }
-      .bottom-control { width: min(28vw, 120px); min-width: 86px; }
-      .bottom-stack.left { right: calc(50% + 46px); width: min(36vw, 150px); min-width: 110px; gap: 6px; }
-      .stack-control { grid-template-columns: 38px 1fr 34px; gap: 4px; }
-      .bottom-control.right { left: calc(50% + 46px); }
+    @media (max-width: 430px) {
+      .pad-wrap { width: 108px; }
+      .pad { width: 108px; height: 108px; border-radius: 20px; }
+      .pad-knob { width: 24px; height: 24px; }
+      .record-button { width: 70px; height: 70px; }
+      .record-button::before { inset: 12px; }
+      .record-button.recording::before { inset: 19px; }
+      .drag-hint { top: calc(52px + var(--safe-top)); }
+    }
+    @media (max-height: 650px) {
+      .pad-wrap { bottom: calc(10px + var(--safe-bottom)); }
+      .record-ui { bottom: calc(10px + var(--safe-bottom)); }
+      .drag-hint { display: none; }
     }
   </style>
-  <script>
-    AFRAME.registerComponent('marker-status-toast', {
-      schema: { marker: { type: 'selector' } },
-      init: function () {
-        this.visibleLastFrame = false;
-        this.ready = false;
-        window.setTimeout(() => { this.ready = true; }, 1200);
-      },
-      tick: function () {
-        const markerEl = this.data.marker;
-        if (!markerEl || !markerEl.object3D) return;
-        const visibleNow = !!markerEl.object3D.visible;
-        if (visibleNow !== this.visibleLastFrame && this.ready && window.showMarkerToast) {
-          window.showMarkerToast(visibleNow ? 'Hiro認識' : 'Hiro見失い');
-        }
-        this.visibleLastFrame = visibleNow;
-      }
-    });
-  </script>
 </head>
 <body>
-  <div class="top-controls" aria-label="上部AR調整">
-    <div class="caption"><span>横位置</span><span>Hiroに追従</span></div>
-    <label class="h-control">横位置 <input id="offsetX" type="range" min="-4" max="4" step="0.05" value="0"><b id="offsetXVal">0.00</b></label>
+  <button class="ui menu-button" id="openMenu" type="button" aria-haspopup="dialog" aria-controls="menuModal">menu</button>
+  <div class="ui tiny-toast" id="toast">Hiroを認識</div>
+  <div class="ui drag-hint">絵をドラッグ: 横位置 / 高さ</div>
+
+  <div id="dragHitArea" aria-label="絵をドラッグして位置調整"></div>
+
+  <div class="ui pad-wrap rotate-wrap" aria-label="回転コントロール">
+    <div class="pad-title"><span>回転 X/Y</span><button id="resetRotation" type="button">戻す</button></div>
+    <div class="pad" id="rotationPad">
+      <div class="pad-knob" id="rotationKnob"></div>
+    </div>
+    <div class="pad-caption" id="rotationCaption">X 0° / Y 0°</div>
   </div>
 
-  <label class="right-height-control" aria-label="高さ調整">
-    <span>高さ</span>
-    <input id="height" type="range" min="0" max="6" step="0.05" value="1.0">
-    <b id="heightVal">1.00</b>
-  </label>
-
-  <button class="menu-button" id="openMenu" type="button" aria-haspopup="dialog" aria-controls="menuModal">menu</button>
-
-  <div class="bottom-stack left" aria-label="絵の横幅・高さ・回転調整">
-    <label class="stack-control">
-      <span>横幅</span>
-      <input id="artWidth" type="range" min="0.2" max="4" step="0.01" value="1.00">
-      <b id="artWidthVal">1.00</b>
-    </label>
-    <label class="stack-control">
-      <span>絵高さ</span>
-      <input id="artHeight" type="range" min="0.2" max="4" step="0.01" value="1.00">
-      <b id="artHeightVal">1.00</b>
-    </label>
-    <label class="stack-control">
-      <span>回転</span>
-      <input id="rotation" type="range" min="-180" max="180" step="1" value="0">
-      <b id="rotationVal">0°</b>
-    </label>
+  <div class="ui pad-wrap size-wrap" aria-label="サイズコントロール">
+    <div class="pad-title"><span>幅 / 高さ</span><button id="resetSize" type="button">戻す</button></div>
+    <div class="pad" id="sizePad">
+      <div class="pad-knob" id="sizeKnob"></div>
+    </div>
+    <div class="pad-caption" id="sizeCaption">幅 1.0 / 高さ 1.0</div>
   </div>
 
-  <label class="bottom-control right" aria-label="大きさ調整">
-    <span>大きさ</span>
-    <input id="size" type="range" min="0.2" max="4" step="0.01" value="1.2">
-    <b id="sizeVal">1.20</b>
-  </label>
-
-  <a id="downloadVideo" class="save-video" href="#" download="ar-drawing.mp4">動画を保存</a>
-  <div class="record-dock" aria-label="録画操作">
-    <button id="recordToggle" class="record-main" type="button" aria-label="録画開始"></button>
-    <div id="recordStatus" class="record-label">タップで録画</div>
+  <div class="ui record-ui">
+    <button class="record-button" id="recordButton" type="button" aria-label="録画開始"></button>
+    <div class="record-label" id="recordLabel">録画開始</div>
   </div>
 
   <div class="modal-backdrop" id="menuModal" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
@@ -431,7 +382,7 @@
       <div class="modal-header">
         <div>
           <h1 id="menuTitle">動くお絵かきAR</h1>
-          <p>絵はHiroマーカーの子要素として配置され、Hiroの動きに直接追従します。横幅・絵高さ・回転は撮影ボタン左側で調整できます。録画はカメラ映像とARオブジェクトだけを合成して保存します。</p>
+          <p>絵はHiroマーカーに追従します。絵を直接ドラッグすると、Hiro基準の横位置と高さを調整できます。</p>
         </div>
         <button class="close-button" id="closeMenu" type="button" aria-label="閉じる">×</button>
       </div>
@@ -453,8 +404,6 @@
           <select id="motion" title="動き">
             <option value="float">ふわふわ</option>
             <option value="swim">泳ぐ</option>
-            <option value="spin">くるくる</option>
-            <option value="jump">ぴょんぴょん</option>
             <option value="still">止める</option>
           </select>
         </div>
@@ -463,46 +412,41 @@
       <div class="section">
         <div class="row">
           <a class="primary-link" href="hiro-marker-print.html" target="_blank" rel="noopener">Hiroを印刷</a>
-          <button class="ghost-button" id="resetPose" type="button">表示位置をリセット</button>
+          <button class="danger" id="resetAll" type="button">全部リセット</button>
         </div>
-        <p class="small">録画終了後は自動で保存を開始します。MP4非対応のブラウザではWebMで保存します。</p>
+        <p class="small">録画は下部中央のボタンで開始・停止します。停止後、自動で保存されます。録画にUIは入りません。</p>
+        <p class="small">MP4対応ブラウザではMP4、非対応時はWebMで保存します。マイク許可を出すと音声も入ります。</p>
       </div>
     </section>
   </div>
 
-  <div id="toast" role="status" aria-live="polite"></div>
   <canvas id="recordCanvas"></canvas>
 
   <a-scene
     embedded
-    marker-status-toast="marker:#hiroMarker"
     vr-mode-ui="enabled:false"
-    renderer="alpha:true; antialias:true; logarithmicDepthBuffer:true"
+    renderer="logarithmicDepthBuffer:true; antialias:true; alpha:true; preserveDrawingBuffer:true"
     arjs="sourceType:webcam; trackingMethod:best; debugUIEnabled:false;"
   >
+    <a-assets>
+      <img id="fishTexture" alt="" crossorigin="anonymous">
+      <img id="jellyfishTexture" alt="" crossorigin="anonymous">
+    </a-assets>
+
     <a-marker id="hiroMarker" preset="hiro" smooth="true" smoothCount="8" smoothTolerance="0.01" smoothThreshold="5">
-      <!--
-        絵はHiroマーカーの子要素です。
-        画面座標に固定せず、AR.jsのマーカー姿勢に直接追従します。
-      -->
-      <a-entity id="lastAnchor" visible="true">
-        <a-entity id="artworkPlacement" position="0 1.0 0" rotation="0 0 0">
-          <a-entity id="motionGroup" position="0 0 0" rotation="0 0 0">
-            <a-entity id="artworkSizer" scale="1.2 1.2 1.2">
-              <a-plane
-                id="drawing"
-                width="1"
-                height="1"
-                material="transparent:true; side:double; alphaTest:0.03"
-                rotation="0 0 0"
-              ></a-plane>
-            </a-entity>
-          </a-entity>
+      <a-entity id="artRoot" position="0 1 0">
+        <a-entity id="motionGroup" position="0 0 0">
+          <a-entity
+            id="artPlane"
+            geometry="primitive:plane; width:1.35; height:1"
+            material="src:#fishTexture; transparent:true; side:double; alphaTest:0.03"
+            rotation="-90 0 0"
+          ></a-entity>
         </a-entity>
       </a-entity>
     </a-marker>
 
-    <a-entity id="arCamera" camera></a-entity>
+    <a-entity camera></a-entity>
   </a-scene>
 
 <script>
@@ -542,449 +486,516 @@ const jellyfishSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height
   </g>
 </svg>`;
 
-const sceneEl = document.querySelector('a-scene');
-const drawing = document.getElementById('drawing');
-const artworkPlacement = document.getElementById('artworkPlacement');
-const motionGroup = document.getElementById('motionGroup');
-const artworkSizer = document.getElementById('artworkSizer');
-const preset = document.getElementById('preset');
-const motion = document.getElementById('motion');
-const height = document.getElementById('height');
-const offsetX = document.getElementById('offsetX');
-const size = document.getElementById('size');
-const artWidth = document.getElementById('artWidth');
-const artHeight = document.getElementById('artHeight');
-const rotation = document.getElementById('rotation');
-const heightVal = document.getElementById('heightVal');
-const offsetXVal = document.getElementById('offsetXVal');
-const sizeVal = document.getElementById('sizeVal');
-const artWidthVal = document.getElementById('artWidthVal');
-const artHeightVal = document.getElementById('artHeightVal');
-const rotationVal = document.getElementById('rotationVal');
-const fileInput = document.getElementById('file');
-const modal = document.getElementById('menuModal');
-const openMenu = document.getElementById('openMenu');
-const closeMenu = document.getElementById('closeMenu');
-const resetPose = document.getElementById('resetPose');
-const toastEl = document.getElementById('toast');
-const recordToggle = document.getElementById('recordToggle');
-const downloadVideo = document.getElementById('downloadVideo');
-const recordStatus = document.getElementById('recordStatus');
-const recordCanvas = document.getElementById('recordCanvas');
-const recordCtx = recordCanvas.getContext('2d');
-
 const state = {
+  offsetX: 0,
+  offsetY: 1,
+  rotX: 0,
+  rotY: 0,
+  widthScale: 1.35,
+  heightScale: 1,
+  baseRatio: 1,
+  markerVisible: false,
+  wasVisible: false,
+  recording: false,
   recorder: null,
   chunks: [],
-  recording: false,
-  videoUrl: null,
-  audioContext: null,
-  audioDestination: null,
+  mixedStream: null,
   micStream: null,
+  recordLoop: 0,
+  recordMime: '',
+  recordExt: 'webm',
   lastToastAt: 0,
+  motion: 'float'
 };
 
-function openModal() { modal.classList.add('open'); }
-function closeModal() { modal.classList.remove('open'); }
-openMenu.addEventListener('click', openModal);
-closeMenu.addEventListener('click', closeModal);
-modal.addEventListener('click', event => { if (event.target === modal) closeModal(); });
-window.addEventListener('keydown', event => { if (event.key === 'Escape') closeModal(); });
+const elements = {
+  scene: document.querySelector('a-scene'),
+  marker: document.getElementById('hiroMarker'),
+  artRoot: document.getElementById('artRoot'),
+  motionGroup: document.getElementById('motionGroup'),
+  artPlane: document.getElementById('artPlane'),
+  fishTexture: document.getElementById('fishTexture'),
+  jellyfishTexture: document.getElementById('jellyfishTexture'),
+  preset: document.getElementById('preset'),
+  motion: document.getElementById('motion'),
+  file: document.getElementById('file'),
+  openMenu: document.getElementById('openMenu'),
+  closeMenu: document.getElementById('closeMenu'),
+  modal: document.getElementById('menuModal'),
+  resetAll: document.getElementById('resetAll'),
+  recordButton: document.getElementById('recordButton'),
+  recordLabel: document.getElementById('recordLabel'),
+  recordCanvas: document.getElementById('recordCanvas'),
+  rotationPad: document.getElementById('rotationPad'),
+  rotationKnob: document.getElementById('rotationKnob'),
+  rotationCaption: document.getElementById('rotationCaption'),
+  resetRotation: document.getElementById('resetRotation'),
+  sizePad: document.getElementById('sizePad'),
+  sizeKnob: document.getElementById('sizeKnob'),
+  sizeCaption: document.getElementById('sizeCaption'),
+  resetSize: document.getElementById('resetSize'),
+  dragHitArea: document.getElementById('dragHitArea'),
+  toast: document.getElementById('toast')
+};
 
-function showToast(message) {
-  const now = performance.now();
-  if (now - state.lastToastAt < 1800) return;
-  state.lastToastAt = now;
-  toastEl.textContent = message;
-  toastEl.classList.add('show');
-  window.clearTimeout(showToast.timer);
-  showToast.timer = window.setTimeout(() => toastEl.classList.remove('show'), 520);
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
 }
-window.showMarkerToast = showToast;
 
 function svgToDataUri(svg) {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
 
-function loadImage(src) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
+function setTextureImage(imgEl, svg) {
+  imgEl.src = svgToDataUri(svg);
 }
 
-async function setArtwork(src) {
-  const img = await loadImage(src);
-  const w = img.naturalWidth || img.width || 1;
-  const h = img.naturalHeight || img.height || 1;
-  const ratio = Math.max(0.01, w / h);
-  drawing.setAttribute('width', String(ratio));
-  drawing.setAttribute('height', '1');
-  drawing.setAttribute('geometry', `primitive: plane; width: ${ratio}; height: 1`);
-  drawing.setAttribute('material', {
-    src,
-    transparent: true,
-    side: 'double',
-    alphaTest: 0.03
-  });
-  applyMotion(motion.value);
+setTextureImage(elements.fishTexture, fishSvg);
+setTextureImage(elements.jellyfishTexture, jellyfishSvg);
+
+function showToast(message) {
+  const now = performance.now();
+  if (now - state.lastToastAt < 1200) return;
+  state.lastToastAt = now;
+  elements.toast.textContent = message;
+  elements.toast.classList.add('show');
+  clearTimeout(showToast.timer);
+  showToast.timer = setTimeout(() => elements.toast.classList.remove('show'), 850);
 }
 
-async function setPreset(name) {
-  await setArtwork(svgToDataUri(name === 'jellyfish' ? jellyfishSvg : fishSvg));
+function openModal() {
+  elements.modal.classList.add('open');
 }
 
-function values() {
-  return {
-    h: Number(height.value),
-    x: Number(offsetX.value),
-    s: Number(size.value),
-    aw: Number(artWidth.value),
-    ah: Number(artHeight.value),
-    r: Number(rotation.value),
-  };
+function closeModal() {
+  elements.modal.classList.remove('open');
 }
 
-function updateLabels() {
-  const v = values();
-  heightVal.textContent = v.h.toFixed(2);
-  offsetXVal.textContent = v.x.toFixed(2);
-  sizeVal.textContent = v.s.toFixed(2);
-  artWidthVal.textContent = v.aw.toFixed(2);
-  artHeightVal.textContent = v.ah.toFixed(2);
-  rotationVal.textContent = `${Math.round(v.r)}°`;
+elements.openMenu.addEventListener('click', openModal);
+elements.closeMenu.addEventListener('click', closeModal);
+elements.modal.addEventListener('click', event => {
+  if (event.target === elements.modal) closeModal();
+});
+window.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeModal();
+});
+
+function updateArtTransform() {
+  elements.artRoot.setAttribute('position', `${state.offsetX.toFixed(3)} ${state.offsetY.toFixed(3)} 0`);
+  elements.artPlane.setAttribute('rotation', `${(-90 + state.rotX).toFixed(2)} ${state.rotY.toFixed(2)} 0`);
+  elements.artPlane.setAttribute(
+    'geometry',
+    `primitive:plane; width:${state.widthScale.toFixed(3)}; height:${state.heightScale.toFixed(3)}`
+  );
+
+  const rotX = Math.round(state.rotX);
+  const rotY = Math.round(state.rotY);
+  elements.rotationCaption.textContent = `X ${rotX}° / Y ${rotY}°`;
+  elements.sizeCaption.textContent = `幅 ${state.widthScale.toFixed(2)} / 高さ ${state.heightScale.toFixed(2)}`;
 }
 
-function clearAnimations() {
-  motionGroup.removeAttribute('animation__float');
-  motionGroup.removeAttribute('animation__swim');
-  motionGroup.removeAttribute('animation__spin');
-  motionGroup.removeAttribute('animation__jump');
-}
+function setMotion(type) {
+  state.motion = type;
+  elements.motionGroup.removeAttribute('animation__float');
+  elements.motionGroup.removeAttribute('animation__swim');
 
-function setBaseTransform() {
-  const v = values();
-  updateLabels();
-  artworkPlacement.setAttribute('position', `${v.x.toFixed(2)} ${v.h.toFixed(2)} 0`);
-  artworkPlacement.setAttribute('rotation', `0 ${v.r.toFixed(1)} 0`);
-  const scaleX = v.s * v.aw;
-  const scaleY = v.s * v.ah;
-  // 全体の大きさは均等スケール、横幅・絵高さは追加倍率として反映します。
-  artworkSizer.setAttribute('scale', `${scaleX.toFixed(3)} ${scaleY.toFixed(3)} ${v.s.toFixed(3)}`);
-  motionGroup.setAttribute('position', '0 0 0');
-  motionGroup.setAttribute('rotation', '0 0 0');
-}
-
-function applyMotion(type) {
-  clearAnimations();
-  setBaseTransform();
-  if (type === 'still') return;
   if (type === 'float') {
-    motionGroup.setAttribute('animation__float', 'property: position; from: 0 0 0; to: 0 0.45 0; dir: alternate; dur: 1100; easing: easeInOutSine; loop: true');
+    elements.motionGroup.setAttribute('animation__float', 'property: position; from: 0 -0.08 0; to: 0 0.28 0; dir: alternate; dur: 1100; easing: easeInOutSine; loop: true');
   } else if (type === 'swim') {
-    motionGroup.setAttribute('animation__swim', 'property: position; from: -0.35 0 0; to: 0.35 0 0; dir: alternate; dur: 1300; easing: easeInOutSine; loop: true');
-  } else if (type === 'spin') {
-    motionGroup.setAttribute('animation__spin', 'property: rotation; from: 0 0 0; to: 0 360 0; dur: 1800; easing: linear; loop: true');
-  } else if (type === 'jump') {
-    motionGroup.setAttribute('animation__jump', 'property: position; from: 0 0 0; to: 0 0.85 0; dir: alternate; dur: 520; easing: easeOutQuad; loop: true');
+    elements.motionGroup.setAttribute('animation__swim', 'property: position; from: -0.22 0 0; to: 0.22 0 0; dir: alternate; dur: 1250; easing: easeInOutSine; loop: true');
+  } else {
+    elements.motionGroup.setAttribute('position', '0 0 0');
   }
 }
 
-[height, offsetX, size, artWidth, artHeight, rotation].forEach(input => input.addEventListener('input', () => applyMotion(motion.value)));
-motion.addEventListener('change', event => applyMotion(event.target.value));
-preset.addEventListener('change', event => setPreset(event.target.value));
-fileInput.addEventListener('change', event => {
+elements.motion.addEventListener('change', event => setMotion(event.target.value));
+
+elements.preset.addEventListener('change', event => {
+  if (event.target.value === 'fish') {
+    elements.artPlane.setAttribute('material', 'src:#fishTexture; transparent:true; side:double; alphaTest:0.03');
+    state.widthScale = 1.35;
+    state.heightScale = 1;
+  } else {
+    elements.artPlane.setAttribute('material', 'src:#jellyfishTexture; transparent:true; side:double; alphaTest:0.03');
+    state.widthScale = 1.0;
+    state.heightScale = 1.35;
+  }
+  syncSizeKnob();
+  updateArtTransform();
+});
+
+elements.file.addEventListener('change', event => {
   const file = event.target.files && event.target.files[0];
   if (!file) return;
+
   const reader = new FileReader();
-  reader.onload = async () => {
-    try {
-      await setArtwork(reader.result);
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const ratio = img.width / img.height || 1;
+      state.widthScale = clamp(ratio, 0.3, 3.0);
+      state.heightScale = 1;
+      elements.artPlane.setAttribute('material', {
+        src: reader.result,
+        transparent: true,
+        side: 'double',
+        alphaTest: 0.03
+      });
+      syncSizeKnob();
+      updateArtTransform();
       closeModal();
-    } catch (error) {
-      alert('画像を読み込めませんでした。別の画像で試してください。');
-    }
+    };
+    img.onerror = () => alert('画像を読み込めませんでした。別の画像で試してください。');
+    img.src = reader.result;
   };
   reader.readAsDataURL(file);
 });
-resetPose.addEventListener('click', () => {
-  height.value = '1.0';
-  offsetX.value = '0';
-  size.value = '1.2';
-  artWidth.value = '1.00';
-  artHeight.value = '1.00';
-  rotation.value = '0';
-  applyMotion(motion.value);
-  showToast('調整をリセット');
-  closeModal();
-});
 
-function setImportantStyle(el, prop, value) {
-  if (el && el.style) el.style.setProperty(prop, value, 'important');
+function resetRotation() {
+  state.rotX = 0;
+  state.rotY = 0;
+  syncRotationKnob();
+  updateArtTransform();
 }
 
-function forceFullscreenAr() {
-  document.documentElement.style.setProperty('overflow', 'hidden', 'important');
-  document.body.style.setProperty('overflow', 'hidden', 'important');
+function resetSize() {
+  state.widthScale = elements.preset.value === 'jellyfish' ? 1.0 : 1.35;
+  state.heightScale = elements.preset.value === 'jellyfish' ? 1.35 : 1.0;
+  syncSizeKnob();
+  updateArtTransform();
+}
 
-  document.querySelectorAll('video, #arjs-video, .arjs-video').forEach(video => {
-    setImportantStyle(video, 'position', 'fixed');
-    setImportantStyle(video, 'top', '0');
-    setImportantStyle(video, 'left', '0');
-    setImportantStyle(video, 'width', '100vw');
-    setImportantStyle(video, 'height', '100vh');
-    setImportantStyle(video, 'object-fit', 'cover');
-    setImportantStyle(video, 'z-index', '0');
-    setImportantStyle(video, 'display', 'block');
-    setImportantStyle(video, 'visibility', 'visible');
-    setImportantStyle(video, 'opacity', '1');
-    video.setAttribute('playsinline', '');
-    video.muted = true;
+function resetAll() {
+  state.offsetX = 0;
+  state.offsetY = 1;
+  resetRotation();
+  resetSize();
+  setMotion(elements.motion.value);
+  closeModal();
+}
+
+elements.resetRotation.addEventListener('click', resetRotation);
+elements.resetSize.addEventListener('click', resetSize);
+elements.resetAll.addEventListener('click', resetAll);
+
+function makePad(pad, knob, onValue) {
+  let active = false;
+
+  const setFromPointer = (event) => {
+    const rect = pad.getBoundingClientRect();
+    const x = clamp(((event.clientX - rect.left) / rect.width) * 2 - 1, -1, 1);
+    const y = clamp(((event.clientY - rect.top) / rect.height) * 2 - 1, -1, 1);
+    knob.style.left = `${((x + 1) / 2) * 100}%`;
+    knob.style.top = `${((y + 1) / 2) * 100}%`;
+    onValue(x, y);
+  };
+
+  pad.addEventListener('pointerdown', event => {
+    active = true;
+    pad.setPointerCapture(event.pointerId);
+    setFromPointer(event);
   });
-
-  document.querySelectorAll('a-scene canvas, canvas.a-canvas').forEach(canvas => {
-    setImportantStyle(canvas, 'position', 'fixed');
-    setImportantStyle(canvas, 'inset', '0');
-    setImportantStyle(canvas, 'width', '100vw');
-    setImportantStyle(canvas, 'height', '100vh');
-    setImportantStyle(canvas, 'background', 'transparent');
-    setImportantStyle(canvas, 'opacity', '1');
-    setImportantStyle(canvas, 'pointer-events', 'none');
-    setImportantStyle(canvas, 'z-index', '10');
+  pad.addEventListener('pointermove', event => {
+    if (!active) return;
+    setFromPointer(event);
   });
+  pad.addEventListener('pointerup', event => {
+    active = false;
+    try { pad.releasePointerCapture(event.pointerId); } catch (_) {}
+  });
+  pad.addEventListener('pointercancel', () => { active = false; });
+}
 
-  if (sceneEl && sceneEl.renderer) {
-    try {
-      sceneEl.renderer.setClearColor(0x000000, 0);
-      sceneEl.renderer.setClearAlpha(0);
-    } catch (error) {}
-  }
+makePad(elements.rotationPad, elements.rotationKnob, (x, y) => {
+  state.rotY = clamp(x * 80, -80, 80);
+  state.rotX = clamp(-y * 80, -80, 80);
+  updateArtTransform();
+});
+
+makePad(elements.sizePad, elements.sizeKnob, (x, y) => {
+  state.widthScale = 0.25 + ((x + 1) / 2) * 2.75;
+  state.heightScale = 0.25 + ((1 - y) / 2) * 2.75;
+  updateArtTransform();
+});
+
+function syncRotationKnob() {
+  const x = state.rotY / 80;
+  const y = -state.rotX / 80;
+  elements.rotationKnob.style.left = `${((x + 1) / 2) * 100}%`;
+  elements.rotationKnob.style.top = `${((y + 1) / 2) * 100}%`;
+}
+
+function syncSizeKnob() {
+  const x = ((state.widthScale - 0.25) / 2.75) * 2 - 1;
+  const y = 1 - ((state.heightScale - 0.25) / 2.75) * 2;
+  elements.sizeKnob.style.left = `${((clamp(x, -1, 1) + 1) / 2) * 100}%`;
+  elements.sizeKnob.style.top = `${((clamp(y, -1, 1) + 1) / 2) * 100}%`;
 }
 
 function findArVideo() {
-  const videos = Array.from(document.querySelectorAll('video'));
-  return videos.find(v => (v.srcObject || v.videoWidth || v.id === 'arjs-video' || v.classList.contains('arjs-video'))) || null;
+  return document.querySelector('video#arjs-video') ||
+         document.querySelector('.arjs-video') ||
+         document.querySelector('video');
 }
 
-function findSceneCanvas() {
-  return document.querySelector('a-scene canvas') || document.querySelector('canvas.a-canvas');
+function findArCanvas() {
+  return document.querySelector('canvas.a-canvas') ||
+         elements.scene?.renderer?.domElement ||
+         document.querySelector('canvas');
 }
 
-function resizeRecordCanvas() {
-  const w = Math.max(1, window.innerWidth);
-  const h = Math.max(1, window.innerHeight);
-  if (recordCanvas.width !== w || recordCanvas.height !== h) {
-    recordCanvas.width = w;
-    recordCanvas.height = h;
+function forceFullscreenLayers() {
+  const video = findArVideo();
+  if (video) {
+    video.style.position = 'fixed';
+    video.style.inset = '0';
+    video.style.width = '100vw';
+    video.style.height = '100vh';
+    video.style.objectFit = 'cover';
+    video.style.zIndex = '0';
+  }
+  const canvas = findArCanvas();
+  if (canvas) {
+    canvas.style.position = 'fixed';
+    canvas.style.inset = '0';
+    canvas.style.width = '100vw';
+    canvas.style.height = '100vh';
+    canvas.style.zIndex = '2';
   }
 }
 
-function drawVideoCover(ctx, video, w, h) {
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, w, h);
-  if (!video || !video.videoWidth || !video.videoHeight) return;
-  const vr = video.videoWidth / video.videoHeight;
-  const cr = w / h;
-  let sw = video.videoWidth;
-  let sh = video.videoHeight;
-  let sx = 0;
-  let sy = 0;
-  if (vr > cr) {
-    sw = video.videoHeight * cr;
-    sx = (video.videoWidth - sw) / 2;
+function projectArtToScreen() {
+  const sceneEl = elements.scene;
+  if (!sceneEl || !sceneEl.camera || !elements.artRoot.object3D) return null;
+  if (!state.markerVisible) return null;
+
+  const world = new THREE.Vector3();
+  elements.artRoot.object3D.getWorldPosition(world);
+  world.project(sceneEl.camera);
+
+  if (!Number.isFinite(world.x) || !Number.isFinite(world.y) || world.z < -1 || world.z > 1) return null;
+
+  const cx = (world.x * 0.5 + 0.5) * window.innerWidth;
+  const cy = (-world.y * 0.5 + 0.5) * window.innerHeight;
+
+  const base = clamp(window.innerHeight * 0.18, 72, 210);
+  const h = base * state.heightScale;
+  const w = base * state.widthScale;
+
+  return {
+    left: cx - w / 2,
+    top: cy - h / 2,
+    width: Math.max(44, w),
+    height: Math.max(44, h)
+  };
+}
+
+function updateDragArea() {
+  const rect = projectArtToScreen();
+  if (!rect) {
+    elements.dragHitArea.style.display = 'none';
+    return;
+  }
+  elements.dragHitArea.style.display = 'block';
+  elements.dragHitArea.style.left = `${rect.left}px`;
+  elements.dragHitArea.style.top = `${rect.top}px`;
+  elements.dragHitArea.style.width = `${rect.width}px`;
+  elements.dragHitArea.style.height = `${rect.height}px`;
+}
+
+let dragState = null;
+elements.dragHitArea.addEventListener('pointerdown', event => {
+  dragState = {
+    pointerId: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    startOffsetX: state.offsetX,
+    startOffsetY: state.offsetY
+  };
+  elements.dragHitArea.classList.add('dragging');
+  elements.dragHitArea.setPointerCapture(event.pointerId);
+});
+
+elements.dragHitArea.addEventListener('pointermove', event => {
+  if (!dragState || dragState.pointerId !== event.pointerId) return;
+  const dx = event.clientX - dragState.x;
+  const dy = event.clientY - dragState.y;
+  const scale = 0.006;
+  state.offsetX = clamp(dragState.startOffsetX + dx * scale, -3.5, 3.5);
+  state.offsetY = clamp(dragState.startOffsetY - dy * scale, -0.5, 6.0);
+  updateArtTransform();
+});
+
+function endDrag(event) {
+  if (!dragState) return;
+  try { elements.dragHitArea.releasePointerCapture(event.pointerId); } catch (_) {}
+  dragState = null;
+  elements.dragHitArea.classList.remove('dragging');
+}
+elements.dragHitArea.addEventListener('pointerup', endDrag);
+elements.dragHitArea.addEventListener('pointercancel', endDrag);
+
+function markerVisibilityLoop() {
+  forceFullscreenLayers();
+
+  state.markerVisible = !!(elements.marker && elements.marker.object3D && elements.marker.object3D.visible);
+  if (state.markerVisible !== state.wasVisible) {
+    showToast(state.markerVisible ? 'Hiroを認識' : 'Hiroを見失いました');
+    state.wasVisible = state.markerVisible;
+  }
+  updateDragArea();
+  requestAnimationFrame(markerVisibilityLoop);
+}
+
+function drawCover(ctx, source, canvasWidth, canvasHeight) {
+  const sw = source.videoWidth || source.width;
+  const sh = source.videoHeight || source.height;
+  if (!sw || !sh) return false;
+
+  const sourceRatio = sw / sh;
+  const targetRatio = canvasWidth / canvasHeight;
+  let sx = 0, sy = 0, sWidth = sw, sHeight = sh;
+
+  if (sourceRatio > targetRatio) {
+    sWidth = sh * targetRatio;
+    sx = (sw - sWidth) / 2;
   } else {
-    sh = video.videoWidth / cr;
-    sy = (video.videoHeight - sh) / 2;
+    sHeight = sw / targetRatio;
+    sy = (sh - sHeight) / 2;
   }
-  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, w, h);
+
+  ctx.drawImage(source, sx, sy, sWidth, sHeight, 0, 0, canvasWidth, canvasHeight);
+  return true;
 }
 
-function drawRecordFrame() {
-  resizeRecordCanvas();
-  const w = recordCanvas.width;
-  const h = recordCanvas.height;
-  recordCtx.setTransform(1, 0, 0, 1, 0, 0);
-  drawVideoCover(recordCtx, findArVideo(), w, h);
-  const sceneCanvas = findSceneCanvas();
-  if (sceneCanvas) {
-    try {
-      recordCtx.drawImage(sceneCanvas, 0, 0, w, h);
-    } catch (error) {}
-  }
+function drawContainOverlay(ctx, source, canvasWidth, canvasHeight) {
+  const sw = source.width;
+  const sh = source.height;
+  if (!sw || !sh) return;
+  ctx.drawImage(source, 0, 0, sw, sh, 0, 0, canvasWidth, canvasHeight);
 }
 
-function loop() {
-  forceFullscreenAr();
-  if (state.recording) drawRecordFrame();
-  requestAnimationFrame(loop);
-}
-
-function supportedMimeType() {
-  const options = [
-    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+function pickRecordingMime() {
+  const types = [
     'video/mp4;codecs=h264,aac',
     'video/mp4',
     'video/webm;codecs=vp9,opus',
     'video/webm;codecs=vp8,opus',
-    'video/webm;codecs=vp9',
-    'video/webm;codecs=vp8',
     'video/webm'
   ];
-  return options.find(type => window.MediaRecorder && MediaRecorder.isTypeSupported(type)) || '';
-}
-
-function setRecordState(mode) {
-  if (mode === 'recording') {
-    recordToggle.classList.add('recording');
-    recordToggle.setAttribute('aria-label', '録画停止');
-    recordStatus.textContent = '録画中';
-    downloadVideo.classList.remove('ready');
-  } else if (mode === 'ready') {
-    recordToggle.classList.remove('recording');
-    recordToggle.setAttribute('aria-label', '録画開始');
-    recordStatus.textContent = '保存しました';
-    downloadVideo.classList.add('ready');
-  } else {
-    recordToggle.classList.remove('recording');
-    recordToggle.setAttribute('aria-label', '録画開始');
-    recordStatus.textContent = 'タップで録画';
-    downloadVideo.classList.remove('ready');
-  }
-}
-
-async function setupAudioMixer(recordingStream) {
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) return;
-  const ctx = new AudioContextClass();
-  await ctx.resume();
-  const dest = ctx.createMediaStreamDestination();
-  state.audioContext = ctx;
-  state.audioDestination = dest;
-  dest.stream.getAudioTracks().forEach(track => recordingStream.addTrack(track));
-
-  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-    try {
-      state.micStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: true
-        },
-        video: false
-      });
-      const micSource = ctx.createMediaStreamSource(state.micStream);
-      micSource.connect(dest);
-      showToast('音声あり');
-    } catch (error) {
-      showToast('マイクなしで録画');
-    }
-  }
-}
-
-function cleanupAudio() {
-  if (state.micStream) {
-    state.micStream.getTracks().forEach(track => track.stop());
-    state.micStream = null;
-  }
-  if (state.audioContext) {
-    state.audioContext.close().catch(() => {});
-    state.audioContext = null;
-    state.audioDestination = null;
-  }
-}
-
-function autoDownload(url, filename) {
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => a.remove(), 0);
+  const supported = types.find(type => window.MediaRecorder && MediaRecorder.isTypeSupported(type));
+  state.recordMime = supported || '';
+  state.recordExt = supported && supported.includes('mp4') ? 'mp4' : 'webm';
 }
 
 async function startRecording() {
-  if (!window.MediaRecorder || !recordCanvas.captureStream) {
-    alert('このブラウザでは録画に対応していません。Android Chrome / Edge で試してください。');
+  if (state.recording) return;
+  const arVideo = findArVideo();
+  const arCanvas = findArCanvas();
+
+  if (!arVideo || !arCanvas) {
+    alert('録画に必要なAR映像が見つかりません。ページを再読み込みしてから試してください。');
     return;
   }
-  const video = findArVideo();
-  if (!video || !video.videoWidth || !video.videoHeight) {
-    alert('カメラ映像の準備中です。少し待ってからもう一度押してください。');
-    return;
-  }
-  if (state.videoUrl) {
-    URL.revokeObjectURL(state.videoUrl);
-    state.videoUrl = null;
-  }
-  downloadVideo.href = '#';
-  downloadVideo.classList.remove('ready');
-  state.chunks = [];
-  resizeRecordCanvas();
-  drawRecordFrame();
 
-  const canvasStream = recordCanvas.captureStream(30);
-  const recordingStream = new MediaStream(canvasStream.getVideoTracks());
-  await setupAudioMixer(recordingStream);
+  pickRecordingMime();
 
-  const mimeType = supportedMimeType();
-  const options = mimeType ? { mimeType } : undefined;
+  const w = Math.min(1280, Math.max(640, window.innerWidth));
+  const h = Math.round(w * (window.innerHeight / window.innerWidth));
+  elements.recordCanvas.width = w;
+  elements.recordCanvas.height = h;
+  const ctx = elements.recordCanvas.getContext('2d');
+
+  let stopped = false;
+  const renderFrame = () => {
+    if (stopped) return;
+    ctx.clearRect(0, 0, w, h);
+    drawCover(ctx, arVideo, w, h);
+    drawContainOverlay(ctx, arCanvas, w, h);
+    state.recordLoop = requestAnimationFrame(renderFrame);
+  };
+  renderFrame();
+
+  const videoStream = elements.recordCanvas.captureStream(30);
+  const tracks = [...videoStream.getVideoTracks()];
+
   try {
-    state.recorder = new MediaRecorder(recordingStream, options);
+    state.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    tracks.push(...state.micStream.getAudioTracks());
+  } catch (_) {
+    state.micStream = null;
+  }
+
+  state.mixedStream = new MediaStream(tracks);
+  state.chunks = [];
+
+  try {
+    const options = state.recordMime ? { mimeType: state.recordMime } : {};
+    state.recorder = new MediaRecorder(state.mixedStream, options);
   } catch (error) {
-    cleanupAudio();
-    alert('録画を開始できませんでした。別のブラウザで試してください。');
+    alert('このブラウザでは録画を開始できませんでした。別のブラウザで試してください。');
+    stopped = true;
     return;
   }
+
   state.recorder.ondataavailable = event => {
-    if (event.data && event.data.size) state.chunks.push(event.data);
+    if (event.data && event.data.size > 0) state.chunks.push(event.data);
   };
   state.recorder.onstop = () => {
-    const type = state.chunks[0]?.type || mimeType || 'video/webm';
-    const isMp4 = type.includes('mp4');
-    const ext = isMp4 ? 'mp4' : 'webm';
-    const filename = `ar-drawing-${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`;
-    const blob = new Blob(state.chunks, { type });
-    state.videoUrl = URL.createObjectURL(blob);
-    downloadVideo.href = state.videoUrl;
-    downloadVideo.download = filename;
+    stopped = true;
+    cancelAnimationFrame(state.recordLoop);
+
+    const mime = state.recordMime || 'video/webm';
+    const blob = new Blob(state.chunks, { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    a.href = url;
+    a.download = `ar-drawing-${stamp}.${state.recordExt}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+    if (state.micStream) state.micStream.getTracks().forEach(track => track.stop());
+    if (state.mixedStream) state.mixedStream.getTracks().forEach(track => track.stop());
+
     state.recording = false;
-    cleanupAudio();
-    setRecordState('ready');
-    autoDownload(state.videoUrl, filename);
-    if (!isMp4) showToast('MP4非対応のためWebM保存');
+    elements.recordButton.classList.remove('recording');
+    elements.recordButton.setAttribute('aria-label', '録画開始');
+    elements.recordLabel.textContent = '録画開始';
   };
 
+  state.recorder.start(250);
   state.recording = true;
-  state.recorder.start(200);
-  setRecordState('recording');
+  elements.recordButton.classList.add('recording');
+  elements.recordButton.setAttribute('aria-label', '録画停止');
+  elements.recordLabel.textContent = '録画停止';
 }
 
 function stopRecording() {
-  if (state.recorder && state.recorder.state !== 'inactive') {
+  if (!state.recording || !state.recorder) return;
+  if (state.recorder.state !== 'inactive') {
     state.recorder.stop();
   }
-  state.recording = false;
 }
 
-recordToggle.addEventListener('click', () => {
-  if (state.recording) stopRecording();
-  else startRecording();
+elements.recordButton.addEventListener('click', () => {
+  if (state.recording) {
+    stopRecording();
+  } else {
+    startRecording();
+  }
 });
 
-window.addEventListener('resize', resizeRecordCanvas);
-window.addEventListener('orientationchange', () => setTimeout(resizeRecordCanvas, 250));
-sceneEl.addEventListener('loaded', forceFullscreenAr);
-sceneEl.addEventListener('renderstart', forceFullscreenAr);
-new MutationObserver(forceFullscreenAr).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
-window.setInterval(forceFullscreenAr, 500);
-
-updateLabels();
-setPreset('fish');
-setRecordState('idle');
-requestAnimationFrame(loop);
+window.addEventListener('resize', forceFullscreenLayers);
+window.addEventListener('load', () => {
+  updateArtTransform();
+  setMotion('float');
+  syncRotationKnob();
+  syncSizeKnob();
+  markerVisibilityLoop();
+});
 </script>
 </body>
 </html>
