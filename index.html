@@ -476,10 +476,10 @@
 <body>
   <video id="cameraMirror" autoplay muted playsinline webkit-playsinline></video>
   <button class="ui menu-button" id="openMenu" type="button" aria-haspopup="dialog" aria-controls="menuModal">menu</button>
-  <div class="ui tiny-toast" id="toast">Hiroを認識</div>
+  <div class="ui tiny-toast" id="toast">マーカーを認識</div>
   <div id="dragHitArea" aria-label="絵をドラッグして位置調整"></div>
 
-  <div class="ui pad-wrap position-wrap" aria-hidden="true" aria-label="Hiro基準の位置コントロール">
+  <div class="ui pad-wrap position-wrap" aria-hidden="true" aria-label="マーカー基準の位置コントロール">
     <div class="pad-title"><span>位置 横/高さ</span><button id="resetPosition" type="button">戻す</button></div>
     <div class="pad" id="positionPad">
       <div class="pad-knob" id="positionKnob"></div>
@@ -517,9 +517,21 @@
       <div class="modal-header">
         <div>
           <h1 id="menuTitle">動くお絵かきAR</h1>
-          <p>絵はHiroマーカーに追従します。画面を見ながら向き・回転・大きさ・位置を調整できます。</p>
+          <p>絵は選択したマーカーに追従します。設定画面でHiroまたはdd-learnを選べます。画面を見ながら向き・回転・大きさ・位置を調整できます。</p>
         </div>
         <button class="close-button" id="closeMenu" type="button" aria-label="閉じる">×</button>
+      </div>
+
+      <div class="section">
+        <p class="small">マーカー</p>
+        <div class="row">
+          <select id="markerSelect" title="マーカー">
+            <option value="hiro">Hiro</option>
+            <option value="dd-learn">dd-learn</option>
+          </select>
+          <a class="primary-link" id="printMarkerLink" href="hiro-marker-print.html" target="_blank" rel="noopener">選択中のマーカーを印刷</a>
+        </div>
+        <p class="small" id="markerHelp">Hiroマーカーを使います。</p>
       </div>
 
       <div class="section">
@@ -546,7 +558,6 @@
 
       <div class="section">
         <div class="row">
-          <a class="primary-link" href="hiro-marker-print.html" target="_blank" rel="noopener">Hiroを印刷</a>
           <button class="danger" id="resetAll" type="button">全部リセット</button>
         </div>
         <p class="small">録画は下部中央のボタンで開始・停止します。録画は最大30秒です。録画中も、回転・高さ・大きさ・位置の調整を続けられます。停止後、保存ボタンを表示します。録画にUIは入りません。</p>
@@ -580,7 +591,7 @@
       <img id="jellyfishTexture" alt="" crossorigin="anonymous">
     </a-assets>
 
-    <a-marker id="hiroMarker" preset="hiro" smooth="true" smoothCount="8" smoothTolerance="0.01" smoothThreshold="5">
+    <a-marker id="hiroMarker" data-marker-label="Hiro" preset="hiro" smooth="true" smoothCount="8" smoothTolerance="0.01" smoothThreshold="5">
       <a-entity id="artRoot" position="0 1 0">
         <a-entity id="motionGroup" position="0 0 0">
           <a-entity
@@ -592,6 +603,8 @@
         </a-entity>
       </a-entity>
     </a-marker>
+
+    <a-marker id="ddLearnMarker" data-marker-label="dd-learn" type="pattern" url="dd-learn-marker.patt" smooth="true" smoothCount="8" smoothTolerance="0.01" smoothThreshold="5"></a-marker>
 
     <a-entity camera></a-entity>
   </a-scene>
@@ -662,17 +675,25 @@ const state = {
   recordObjectUrl: '',
   recordDownloadName: '',
   lastToastAt: 0,
-  motion: 'float'
+  motion: 'float',
+  selectedMarker: 'hiro'
 };
 
 const elements = {
   scene: document.querySelector('a-scene'),
   marker: document.getElementById('hiroMarker'),
+  markers: {
+    hiro: document.getElementById('hiroMarker'),
+    'dd-learn': document.getElementById('ddLearnMarker')
+  },
   artRoot: document.getElementById('artRoot'),
   motionGroup: document.getElementById('motionGroup'),
   artPlane: document.getElementById('artPlane'),
   fishTexture: document.getElementById('fishTexture'),
   jellyfishTexture: document.getElementById('jellyfishTexture'),
+  markerSelect: document.getElementById('markerSelect'),
+  printMarkerLink: document.getElementById('printMarkerLink'),
+  markerHelp: document.getElementById('markerHelp'),
   preset: document.getElementById('preset'),
   motion: document.getElementById('motion'),
   file: document.getElementById('file'),
@@ -731,6 +752,73 @@ function showToast(message) {
   showToast.timer = setTimeout(() => elements.toast.classList.remove('show'), 850);
 }
 
+const MARKER_STORAGE_KEY = 'ar-drawing-marker';
+const MARKER_CONFIGS = {
+  hiro: {
+    label: 'Hiro',
+    printParam: 'hiro',
+    help: 'Hiroマーカーを使います。Hiroを印刷した紙に絵が追従します。'
+  },
+  'dd-learn': {
+    label: 'dd-learn',
+    printParam: 'dd-learn',
+    help: 'dd-learnマーカーを使います。同梱のdd-learn-marker.pattと印刷ページを同じ場所に置いてください。'
+  }
+};
+
+function normalizeMarker(value) {
+  return Object.prototype.hasOwnProperty.call(MARKER_CONFIGS, value) ? value : 'hiro';
+}
+
+function markerLabel(value = state.selectedMarker) {
+  return MARKER_CONFIGS[normalizeMarker(value)].label;
+}
+
+function updatePrintMarkerLink() {
+  if (!elements.printMarkerLink) return;
+  const marker = normalizeMarker(state.selectedMarker);
+  elements.printMarkerLink.href = `hiro-marker-print.html?marker=${MARKER_CONFIGS[marker].printParam}`;
+  elements.printMarkerLink.textContent = `${MARKER_CONFIGS[marker].label}を印刷`;
+}
+
+function loadMarkerSetting() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = params.get('marker');
+    if (fromQuery) return normalizeMarker(fromQuery);
+    return normalizeMarker(localStorage.getItem(MARKER_STORAGE_KEY));
+  } catch (_) {
+    return 'hiro';
+  }
+}
+
+function setMarker(value, options = {}) {
+  const { persist = true, toast = true } = options;
+  const marker = normalizeMarker(value);
+  state.selectedMarker = marker;
+  elements.marker = elements.markers[marker] || elements.markers.hiro;
+
+  if (elements.artRoot && elements.marker && elements.artRoot.parentNode !== elements.marker) {
+    elements.marker.appendChild(elements.artRoot);
+  }
+  if (elements.markerSelect && elements.markerSelect.value !== marker) {
+    elements.markerSelect.value = marker;
+  }
+  if (elements.markerHelp) {
+    elements.markerHelp.textContent = MARKER_CONFIGS[marker].help;
+  }
+  updatePrintMarkerLink();
+
+  state.markerVisible = false;
+  state.wasVisible = null;
+  updateDragArea();
+
+  if (persist) {
+    try { localStorage.setItem(MARKER_STORAGE_KEY, marker); } catch (_) {}
+  }
+  if (toast) showToast(`${MARKER_CONFIGS[marker].label}に切り替えました`);
+}
+
 function openModal() {
   elements.modal.classList.add('open');
 }
@@ -741,6 +829,9 @@ function closeModal() {
 
 elements.openMenu.addEventListener('click', openModal);
 elements.closeMenu.addEventListener('click', closeModal);
+if (elements.markerSelect) {
+  elements.markerSelect.addEventListener('change', event => setMarker(event.target.value));
+}
 elements.modal.addEventListener('click', event => {
   if (event.target === elements.modal) closeModal();
 });
@@ -1163,7 +1254,8 @@ function markerVisibilityLoop() {
 
   state.markerVisible = !!(elements.marker && elements.marker.object3D && elements.marker.object3D.visible);
   if (state.markerVisible !== state.wasVisible) {
-    showToast(state.markerVisible ? 'Hiroを認識' : 'Hiroを見失いました');
+    const label = markerLabel();
+    showToast(state.markerVisible ? `${label}を認識` : `${label}を見失いました`);
     state.wasVisible = state.markerVisible;
   }
   updateDragArea();
@@ -1561,6 +1653,7 @@ function applyRecordSupport() {
 
 window.addEventListener('resize', forceFullscreenLayers);
 window.addEventListener('load', () => {
+  setMarker(loadMarkerSetting(), { persist: false, toast: false });
   updateArtTransform();
   setMotion('float');
   syncRotationKnob();
