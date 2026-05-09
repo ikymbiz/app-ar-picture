@@ -8,79 +8,240 @@
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   <style>
     :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       overflow: hidden;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: #111;
     }
-    .panel {
+    a { color: #9bd1ff; }
+    .menu-button {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 30;
+      border: 1px solid rgba(255,255,255,.28);
+      border-radius: 999px;
+      padding: 10px 15px;
+      font-weight: 800;
+      letter-spacing: .02em;
+      color: #111;
+      background: rgba(255,255,255,.94);
+      box-shadow: 0 8px 24px rgba(0,0,0,.28);
+      cursor: pointer;
+    }
+    .status-pill {
       position: fixed;
       left: 12px;
+      bottom: 12px;
       right: 12px;
-      top: 12px;
-      z-index: 10;
-      background: rgba(0,0,0,.72);
+      z-index: 20;
+      width: fit-content;
+      max-width: calc(100vw - 24px);
+      border-radius: 999px;
+      padding: 9px 13px;
+      color: #e0f2fe;
+      background: rgba(0,0,0,.68);
+      border: 1px solid rgba(255,255,255,.16);
       backdrop-filter: blur(10px);
-      border: 1px solid rgba(255,255,255,.18);
-      border-radius: 16px;
-      padding: 12px;
-      color: #fff;
-      box-shadow: 0 8px 30px rgba(0,0,0,.25);
+      font-size: 12px;
+      line-height: 1.35;
+      box-shadow: 0 8px 24px rgba(0,0,0,.22);
     }
-    h1 { margin: 0 0 8px; font-size: 18px; }
-    p { margin: 6px 0; font-size: 13px; line-height: 1.45; opacity: .9; }
-    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 25;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(0,0,0,.55);
+      backdrop-filter: blur(5px);
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      width: min(560px, 100%);
+      max-height: min(82vh, 720px);
+      overflow: auto;
+      color: #fff;
+      background: rgba(14,14,18,.94);
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 22px;
+      box-shadow: 0 20px 70px rgba(0,0,0,.42);
+      padding: 18px;
+    }
+    .modal-header {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    h1 { margin: 0 0 6px; font-size: 20px; }
+    p { margin: 6px 0; font-size: 13px; line-height: 1.55; opacity: .9; }
+    .close-button {
+      border: 0;
+      border-radius: 999px;
+      width: 36px;
+      height: 36px;
+      font-size: 20px;
+      font-weight: 900;
+      line-height: 1;
+      background: #fff;
+      color: #111;
+      cursor: pointer;
+      flex: none;
+    }
+    .section {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,.12);
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      align-items: center;
+    }
     button, label.btn, select, input[type=range] {
       border: 0;
       border-radius: 999px;
-      padding: 8px 12px;
-      font-weight: 700;
+      padding: 9px 12px;
+      font-weight: 750;
       background: #fff;
       color: #111;
     }
     button, label.btn, select { cursor: pointer; }
-    label.btn { display: inline-flex; }
+    label.btn { display: inline-flex; align-items: center; }
     input[type=file] { display: none; }
+    select { min-width: 112px; }
+    .control {
+      display: grid;
+      grid-template-columns: 74px 1fr 42px;
+      width: 100%;
+      gap: 8px;
+      align-items: center;
+      padding: 7px 0;
+      font-size: 13px;
+    }
+    .control input { width: 100%; }
+    .control b { text-align: right; }
     .small { font-size: 12px; opacity: .82; }
-    .control { display: flex; align-items: center; gap: 6px; }
-    .control input { width: 150px; }
-    a { color: #9bd1ff; }
-    .hidden { display: none; }
-    #status { color: #dbeafe; }
+    .primary-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 9px 12px;
+      background: #1d4ed8;
+      color: white;
+      text-decoration: none;
+      font-weight: 800;
+    }
+    .ghost-button { background: #e5e7eb; }
   </style>
+  <script>
+    AFRAME.registerComponent('keep-last-marker-pose', {
+      schema: {
+        marker: { type: 'selector' },
+        anchor: { type: 'selector' }
+      },
+      init: function () {
+        this.hasPose = false;
+        this.position = new THREE.Vector3();
+        this.quaternion = new THREE.Quaternion();
+      },
+      tick: function () {
+        const markerEl = this.data.marker;
+        const anchorEl = this.data.anchor;
+        if (!markerEl || !anchorEl || !markerEl.object3D || !anchorEl.object3D) return;
+
+        if (markerEl.object3D.visible) {
+          markerEl.object3D.updateMatrixWorld(true);
+
+          // Hiroマーカーの検出状態によって matrixWorld の scale が揺れることがあるため、
+          // 位置と回転だけを使います。絵の大きさは下の「大きさ」スライダーだけで変更します。
+          markerEl.object3D.matrixWorld.decompose(this.position, this.quaternion, new THREE.Vector3());
+          anchorEl.object3D.position.copy(this.position);
+          anchorEl.object3D.quaternion.copy(this.quaternion);
+          anchorEl.object3D.scale.set(1, 1, 1);
+          anchorEl.object3D.visible = true;
+          this.hasPose = true;
+          window.__markerSeen = true;
+        } else if (!this.hasPose) {
+          anchorEl.object3D.visible = false;
+        } else {
+          anchorEl.object3D.visible = true;
+        }
+      }
+    });
+  </script>
 </head>
 <body>
-  <div class="panel" id="panel">
-    <h1>動くお絵かきAR</h1>
-    <p>Hiroマーカーを映すと、魚・クラゲ・自分の絵が動きます。高さはかなり高くまで上げられます。</p>
-    <div class="row">
-      <label class="btn">自分の絵に変更<input id="file" type="file" accept="image/*"></label>
-      <select id="preset" title="絵">
-        <option value="fish">魚</option>
-        <option value="jellyfish">クラゲ</option>
-      </select>
-      <select id="motion" title="動き">
-        <option value="float">ふわふわ</option>
-        <option value="swim">泳ぐ</option>
-        <option value="spin">くるくる</option>
-        <option value="jump">ぴょんぴょん</option>
-      </select>
-      <span class="control small">大きさ <input id="scale" type="range" min="0.3" max="3.5" step="0.1" value="1.2"><b id="scaleVal">1.2</b></span>
-      <span class="control small">高さ <input id="height" type="range" min="0" max="5" step="0.1" value="1.0"><b id="heightVal">1.0</b></span>
-      <button id="hide">UIを隠す</button>
-    </div>
-    <p class="small">Hiroマーカー印刷: <a href="hiro-marker-print.html" target="_blank" rel="noopener">A4の1/8サイズ印刷ページを開く</a></p>
-    <p class="small" id="status">読み込み中...</p>
+  <button class="menu-button" id="openMenu" type="button" aria-haspopup="dialog" aria-controls="menuModal">menu</button>
+  <div class="status-pill" id="status">読み込み中...</div>
+
+  <div class="modal-backdrop open" id="menuModal" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
+    <section class="modal">
+      <div class="modal-header">
+        <div>
+          <h1 id="menuTitle">動くお絵かきAR</h1>
+          <p>Hiroマーカーを映すと、魚・クラゲ・自分の絵が動きます。Hiroから離れても、最後に見えた位置に画像を残します。Hiroの検出がズレても、絵の縮尺は固定します。</p>
+        </div>
+        <button class="close-button" id="closeMenu" type="button" aria-label="閉じる">×</button>
+      </div>
+
+      <div class="section">
+        <p class="small">絵を選ぶ</p>
+        <div class="row">
+          <select id="preset" title="絵">
+            <option value="fish">魚</option>
+            <option value="jellyfish">クラゲ</option>
+          </select>
+          <label class="btn">自分の絵に変更<input id="file" type="file" accept="image/*"></label>
+        </div>
+      </div>
+
+      <div class="section">
+        <p class="small">動き</p>
+        <div class="row">
+          <select id="motion" title="動き">
+            <option value="float">ふわふわ</option>
+            <option value="swim">泳ぐ</option>
+            <option value="spin">くるくる</option>
+            <option value="jump">ぴょんぴょん</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="section">
+        <label class="control">大きさ <input id="scale" type="range" min="0.3" max="3.5" step="0.1" value="1.2"><b id="scaleVal">1.2</b></label>
+        <label class="control">高さ <input id="height" type="range" min="0" max="5" step="0.1" value="1.0"><b id="heightVal">1.0</b></label>
+        <p class="small">Hiroマーカーの揺れでは絵の縮尺を変えません。大きさを変える時はこのスライダーを使います。</p>
+      </div>
+
+      <div class="section">
+        <div class="row">
+          <a class="primary-link" href="hiro-marker-print.html" target="_blank" rel="noopener">Hiroを印刷</a>
+          <button class="ghost-button" id="resetPose" type="button">表示位置をリセット</button>
+        </div>
+        <p class="small">リセット後は、もう一度Hiroマーカーを映すと画像が表示されます。</p>
+      </div>
+    </section>
   </div>
 
   <a-scene
     embedded
+    keep-last-marker-pose="marker:#hiroMarker; anchor:#lastAnchor"
     vr-mode-ui="enabled:false"
     renderer="logarithmicDepthBuffer:true; antialias:true; alpha:true"
     arjs="sourceType:webcam; trackingMethod:best; debugUIEnabled:false;"
   >
-    <a-marker preset="hiro" smooth="true" smoothCount="8" smoothTolerance="0.01" smoothThreshold="5">
+    <a-marker id="hiroMarker" preset="hiro" smooth="true" smoothCount="8" smoothTolerance="0.01" smoothThreshold="5"></a-marker>
+
+    <a-entity id="lastAnchor" visible="false">
       <a-entity
         id="drawing"
         geometry="primitive:plane; width:1; height:1"
@@ -89,7 +250,8 @@
         rotation="-90 0 0"
         scale="1.2 1.2 1.2"
       ></a-entity>
-    </a-marker>
+    </a-entity>
+
     <a-entity camera></a-entity>
   </a-scene>
 
@@ -131,6 +293,8 @@ const jellyfishSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height
 </svg>`;
 
 const drawing = document.getElementById('drawing');
+const anchor = document.getElementById('lastAnchor');
+const marker = document.getElementById('hiroMarker');
 const preset = document.getElementById('preset');
 const motion = document.getElementById('motion');
 const scale = document.getElementById('scale');
@@ -138,10 +302,31 @@ const height = document.getElementById('height');
 const scaleVal = document.getElementById('scaleVal');
 const heightVal = document.getElementById('heightVal');
 const fileInput = document.getElementById('file');
-const panel = document.getElementById('panel');
 const status = document.getElementById('status');
+const modal = document.getElementById('menuModal');
+const openMenu = document.getElementById('openMenu');
+const closeMenu = document.getElementById('closeMenu');
+const resetPose = document.getElementById('resetPose');
 
 const textureCache = {};
+window.__markerSeen = false;
+
+function openModal() {
+  modal.classList.add('open');
+}
+
+function closeModal() {
+  modal.classList.remove('open');
+}
+
+openMenu.addEventListener('click', openModal);
+closeMenu.addEventListener('click', closeModal);
+modal.addEventListener('click', event => {
+  if (event.target === modal) closeModal();
+});
+window.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeModal();
+});
 
 function svgToDataUri(svg) {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
@@ -179,7 +364,7 @@ async function setArtworkFromSvg(name, svg) {
     textureCache[name] = await imageToPngDataUrl(svgToDataUri(svg));
   }
   setArtworkTexture(textureCache[name].dataUrl, textureCache[name].ratio);
-  status.textContent = `${name}を表示中。Hiroマーカーを映してください。`;
+  updateStatus(`${name}を表示中。Hiroマーカーを映してください。`);
 }
 
 function setArtworkTexture(src, ratio = 1) {
@@ -227,6 +412,14 @@ function applyMotion(type) {
   }
 }
 
+function updateStatus(defaultMessage) {
+  if (window.__markerSeen && marker && !marker.object3D.visible) {
+    status.textContent = 'Hiroを見失いました。画像は最後の位置に残しています。';
+  } else {
+    status.textContent = defaultMessage;
+  }
+}
+
 preset.addEventListener('change', async (event) => {
   if (event.target.value === 'fish') {
     await setArtworkFromSvg('魚', fishSvg);
@@ -265,7 +458,22 @@ fileInput.addEventListener('change', async (event) => {
   reader.readAsDataURL(file);
 });
 
-document.getElementById('hide').addEventListener('click', () => panel.classList.toggle('hidden'));
+resetPose.addEventListener('click', () => {
+  window.__markerSeen = false;
+  anchor.object3D.visible = false;
+  status.textContent = '表示位置をリセットしました。もう一度Hiroマーカーを映してください。';
+});
+
+marker.addEventListener('markerFound', () => {
+  window.__markerSeen = true;
+  status.textContent = 'Hiroを認識中。画像を表示しています。';
+});
+
+marker.addEventListener('markerLost', () => {
+  if (window.__markerSeen) {
+    status.textContent = 'Hiroを見失いました。画像は最後の位置に残しています。';
+  }
+});
 
 window.addEventListener('load', () => setArtworkFromSvg('魚', fishSvg));
 </script>
