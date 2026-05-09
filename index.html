@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>動くお絵かきAR - Hiro録画AR版</title>
+  <title>動くお絵かきAR - Hiro追従録画版</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   <style>
@@ -208,14 +208,11 @@
       letter-spacing: .02em;
     }
 
-    .bottom-control {
+    .bottom-control,
+    .bottom-stack {
       position: fixed;
       bottom: calc(env(safe-area-inset-bottom, 0px) + 32px);
       z-index: 1050;
-      width: min(30vw, 150px);
-      min-width: 98px;
-      display: grid;
-      gap: 4px;
       color: #fff;
       font-size: 12px;
       font-weight: 900;
@@ -223,14 +220,34 @@
       pointer-events: auto;
       text-shadow: 0 2px 7px rgba(0,0,0,.95), 0 0 2px rgba(0,0,0,1);
     }
-    .bottom-control.left {
-      right: calc(50% + 52px);
+    .bottom-control {
+      width: min(30vw, 150px);
+      min-width: 98px;
+      display: grid;
+      gap: 4px;
     }
     .bottom-control.right {
       left: calc(50% + 52px);
     }
-    .bottom-control input { width: 100%; }
-    .bottom-control b { font-variant-numeric: tabular-nums; }
+    .bottom-stack.left {
+      right: calc(50% + 52px);
+      width: min(34vw, 170px);
+      min-width: 116px;
+      display: grid;
+      gap: 8px;
+    }
+    .bottom-control input,
+    .bottom-stack input { width: 100%; }
+    .bottom-control b,
+    .bottom-stack b { font-variant-numeric: tabular-nums; }
+    .stack-control {
+      display: grid;
+      grid-template-columns: 42px 1fr 38px;
+      align-items: center;
+      gap: 5px;
+      text-align: left;
+    }
+    .stack-control b { text-align: right; }
 
     .save-video {
       display: none;
@@ -340,45 +357,27 @@
       .record-main { width: 72px; height: 72px; }
       .record-main::before { width: 50px; height: 50px; }
       .bottom-control { width: min(28vw, 120px); min-width: 86px; }
-      .bottom-control.left { right: calc(50% + 46px); }
+      .bottom-stack.left { right: calc(50% + 46px); width: min(36vw, 150px); min-width: 110px; gap: 6px; }
+      .stack-control { grid-template-columns: 38px 1fr 34px; gap: 4px; }
       .bottom-control.right { left: calc(50% + 46px); }
     }
   </style>
   <script>
-    AFRAME.registerComponent('keep-last-marker-pose', {
-      schema: {
-        marker: { type: 'selector' },
-        anchor: { type: 'selector' }
-      },
+    AFRAME.registerComponent('marker-status-toast', {
+      schema: { marker: { type: 'selector' } },
       init: function () {
-        this.hasPose = false;
-        this.position = new THREE.Vector3();
-        this.quaternion = new THREE.Quaternion();
-        window.addEventListener('reset-ar-pose', () => {
-          this.hasPose = false;
-          if (this.data.anchor && this.data.anchor.object3D) {
-            this.data.anchor.object3D.visible = false;
-          }
-        });
+        this.visibleLastFrame = false;
+        this.ready = false;
+        window.setTimeout(() => { this.ready = true; }, 1200);
       },
       tick: function () {
         const markerEl = this.data.marker;
-        const anchorEl = this.data.anchor;
-        if (!markerEl || !anchorEl || !markerEl.object3D || !anchorEl.object3D) return;
-
-        if (markerEl.object3D.visible) {
-          markerEl.object3D.updateMatrixWorld(true);
-          markerEl.object3D.matrixWorld.decompose(this.position, this.quaternion, new THREE.Vector3());
-          anchorEl.object3D.position.copy(this.position);
-          anchorEl.object3D.quaternion.copy(this.quaternion);
-          anchorEl.object3D.scale.set(1, 1, 1);
-          anchorEl.object3D.visible = true;
-          this.hasPose = true;
-        } else if (this.hasPose) {
-          anchorEl.object3D.visible = true;
-        } else {
-          anchorEl.object3D.visible = false;
+        if (!markerEl || !markerEl.object3D) return;
+        const visibleNow = !!markerEl.object3D.visible;
+        if (visibleNow !== this.visibleLastFrame && this.ready && window.showMarkerToast) {
+          window.showMarkerToast(visibleNow ? 'Hiro認識' : 'Hiro見失い');
         }
+        this.visibleLastFrame = visibleNow;
       }
     });
   </script>
@@ -397,11 +396,23 @@
 
   <button class="menu-button" id="openMenu" type="button" aria-haspopup="dialog" aria-controls="menuModal">menu</button>
 
-  <label class="bottom-control left" aria-label="回転調整">
-    <span>回転</span>
-    <input id="rotation" type="range" min="-180" max="180" step="1" value="0">
-    <b id="rotationVal">0°</b>
-  </label>
+  <div class="bottom-stack left" aria-label="絵の横幅・高さ・回転調整">
+    <label class="stack-control">
+      <span>横幅</span>
+      <input id="artWidth" type="range" min="0.2" max="4" step="0.01" value="1.00">
+      <b id="artWidthVal">1.00</b>
+    </label>
+    <label class="stack-control">
+      <span>絵高さ</span>
+      <input id="artHeight" type="range" min="0.2" max="4" step="0.01" value="1.00">
+      <b id="artHeightVal">1.00</b>
+    </label>
+    <label class="stack-control">
+      <span>回転</span>
+      <input id="rotation" type="range" min="-180" max="180" step="1" value="0">
+      <b id="rotationVal">0°</b>
+    </label>
+  </div>
 
   <label class="bottom-control right" aria-label="大きさ調整">
     <span>大きさ</span>
@@ -420,7 +431,7 @@
       <div class="modal-header">
         <div>
           <h1 id="menuTitle">動くお絵かきAR</h1>
-          <p>絵はHiroマーカーに追従する3D ARオブジェクトです。録画はAR.jsのカメラ映像とARオブジェクトだけを合成して保存します。</p>
+          <p>絵はHiroマーカーの子要素として配置され、Hiroの動きに直接追従します。横幅・絵高さ・回転は撮影ボタン左側で調整できます。録画はカメラ映像とARオブジェクトだけを合成して保存します。</p>
         </div>
         <button class="close-button" id="closeMenu" type="button" aria-label="閉じる">×</button>
       </div>
@@ -464,28 +475,32 @@
 
   <a-scene
     embedded
-    keep-last-marker-pose="marker:#hiroMarker; anchor:#lastAnchor"
+    marker-status-toast="marker:#hiroMarker"
     vr-mode-ui="enabled:false"
     renderer="alpha:true; antialias:true; logarithmicDepthBuffer:true"
     arjs="sourceType:webcam; trackingMethod:best; debugUIEnabled:false;"
   >
-    <a-marker id="hiroMarker" preset="hiro" smooth="true" smoothCount="8" smoothTolerance="0.01" smoothThreshold="5"></a-marker>
-
-    <a-entity id="lastAnchor" visible="false">
-      <a-entity id="artworkPlacement" position="0 1.0 0" rotation="0 0 0">
-        <a-entity id="motionGroup" position="0 0 0" rotation="0 0 0">
-          <a-entity id="artworkSizer" scale="1.2 1.2 1.2">
-            <a-plane
-              id="drawing"
-              width="1"
-              height="1"
-              material="transparent:true; side:double; alphaTest:0.03"
-              rotation="0 0 0"
-            ></a-plane>
+    <a-marker id="hiroMarker" preset="hiro" smooth="true" smoothCount="8" smoothTolerance="0.01" smoothThreshold="5">
+      <!--
+        絵はHiroマーカーの子要素です。
+        画面座標に固定せず、AR.jsのマーカー姿勢に直接追従します。
+      -->
+      <a-entity id="lastAnchor" visible="true">
+        <a-entity id="artworkPlacement" position="0 1.0 0" rotation="0 0 0">
+          <a-entity id="motionGroup" position="0 0 0" rotation="0 0 0">
+            <a-entity id="artworkSizer" scale="1.2 1.2 1.2">
+              <a-plane
+                id="drawing"
+                width="1"
+                height="1"
+                material="transparent:true; side:double; alphaTest:0.03"
+                rotation="0 0 0"
+              ></a-plane>
+            </a-entity>
           </a-entity>
         </a-entity>
       </a-entity>
-    </a-entity>
+    </a-marker>
 
     <a-entity id="arCamera" camera></a-entity>
   </a-scene>
@@ -537,10 +552,14 @@ const motion = document.getElementById('motion');
 const height = document.getElementById('height');
 const offsetX = document.getElementById('offsetX');
 const size = document.getElementById('size');
+const artWidth = document.getElementById('artWidth');
+const artHeight = document.getElementById('artHeight');
 const rotation = document.getElementById('rotation');
 const heightVal = document.getElementById('heightVal');
 const offsetXVal = document.getElementById('offsetXVal');
 const sizeVal = document.getElementById('sizeVal');
+const artWidthVal = document.getElementById('artWidthVal');
+const artHeightVal = document.getElementById('artHeightVal');
 const rotationVal = document.getElementById('rotationVal');
 const fileInput = document.getElementById('file');
 const modal = document.getElementById('menuModal');
@@ -574,13 +593,14 @@ window.addEventListener('keydown', event => { if (event.key === 'Escape') closeM
 
 function showToast(message) {
   const now = performance.now();
-  if (now - state.lastToastAt < 1300) return;
+  if (now - state.lastToastAt < 1800) return;
   state.lastToastAt = now;
   toastEl.textContent = message;
   toastEl.classList.add('show');
   window.clearTimeout(showToast.timer);
-  showToast.timer = window.setTimeout(() => toastEl.classList.remove('show'), 700);
+  showToast.timer = window.setTimeout(() => toastEl.classList.remove('show'), 520);
 }
+window.showMarkerToast = showToast;
 
 function svgToDataUri(svg) {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
@@ -621,6 +641,8 @@ function values() {
     h: Number(height.value),
     x: Number(offsetX.value),
     s: Number(size.value),
+    aw: Number(artWidth.value),
+    ah: Number(artHeight.value),
     r: Number(rotation.value),
   };
 }
@@ -630,6 +652,8 @@ function updateLabels() {
   heightVal.textContent = v.h.toFixed(2);
   offsetXVal.textContent = v.x.toFixed(2);
   sizeVal.textContent = v.s.toFixed(2);
+  artWidthVal.textContent = v.aw.toFixed(2);
+  artHeightVal.textContent = v.ah.toFixed(2);
   rotationVal.textContent = `${Math.round(v.r)}°`;
 }
 
@@ -645,7 +669,10 @@ function setBaseTransform() {
   updateLabels();
   artworkPlacement.setAttribute('position', `${v.x.toFixed(2)} ${v.h.toFixed(2)} 0`);
   artworkPlacement.setAttribute('rotation', `0 ${v.r.toFixed(1)} 0`);
-  artworkSizer.setAttribute('scale', `${v.s.toFixed(3)} ${v.s.toFixed(3)} ${v.s.toFixed(3)}`);
+  const scaleX = v.s * v.aw;
+  const scaleY = v.s * v.ah;
+  // 全体の大きさは均等スケール、横幅・絵高さは追加倍率として反映します。
+  artworkSizer.setAttribute('scale', `${scaleX.toFixed(3)} ${scaleY.toFixed(3)} ${v.s.toFixed(3)}`);
   motionGroup.setAttribute('position', '0 0 0');
   motionGroup.setAttribute('rotation', '0 0 0');
 }
@@ -665,7 +692,7 @@ function applyMotion(type) {
   }
 }
 
-[height, offsetX, size, rotation].forEach(input => input.addEventListener('input', () => applyMotion(motion.value)));
+[height, offsetX, size, artWidth, artHeight, rotation].forEach(input => input.addEventListener('input', () => applyMotion(motion.value)));
 motion.addEventListener('change', event => applyMotion(event.target.value));
 preset.addEventListener('change', event => setPreset(event.target.value));
 fileInput.addEventListener('change', event => {
@@ -683,8 +710,14 @@ fileInput.addEventListener('change', event => {
   reader.readAsDataURL(file);
 });
 resetPose.addEventListener('click', () => {
-  window.dispatchEvent(new Event('reset-ar-pose'));
-  showToast('位置リセット');
+  height.value = '1.0';
+  offsetX.value = '0';
+  size.value = '1.2';
+  artWidth.value = '1.00';
+  artHeight.value = '1.00';
+  rotation.value = '0';
+  applyMotion(motion.value);
+  showToast('調整をリセット');
   closeModal();
 });
 
@@ -850,36 +883,6 @@ async function setupAudioMixer(recordingStream) {
   }
 }
 
-function playShutterSound() {
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) return;
-  const ctx = state.audioContext || new AudioContextClass();
-  if (!state.audioContext) state.audioContext = ctx;
-  ctx.resume();
-
-  const now = ctx.currentTime;
-  const osc1 = ctx.createOscillator();
-  const osc2 = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc1.type = 'square';
-  osc2.type = 'triangle';
-  osc1.frequency.setValueAtTime(880, now);
-  osc1.frequency.exponentialRampToValueAtTime(260, now + 0.08);
-  osc2.frequency.setValueAtTime(1320, now + 0.03);
-  osc2.frequency.exponentialRampToValueAtTime(420, now + 0.12);
-  gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(0.22, now + 0.01);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
-  osc1.connect(gain);
-  osc2.connect(gain);
-  gain.connect(ctx.destination);
-  if (state.audioDestination) gain.connect(state.audioDestination);
-  osc1.start(now);
-  osc2.start(now + 0.03);
-  osc1.stop(now + 0.18);
-  osc2.stop(now + 0.18);
-}
-
 function cleanupAudio() {
   if (state.micStream) {
     state.micStream.getTracks().forEach(track => track.stop());
@@ -957,7 +960,6 @@ async function startRecording() {
   state.recording = true;
   state.recorder.start(200);
   setRecordState('recording');
-  playShutterSound();
 }
 
 function stopRecording() {
