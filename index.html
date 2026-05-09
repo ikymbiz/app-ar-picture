@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>動くお絵かきAR - Hiro Canvas録画版</title>
+  <title>動くお絵かきAR - Hiro Canvas単一カメラ版</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   <style>
@@ -20,19 +20,25 @@
       user-select: none;
       -webkit-user-select: none;
     }
+    /*
+      画面表示のカメラ映像はAR.jsが作るvideo 1つだけにします。
+      自前の #cameraPreview は録画フォールバック用の非表示videoです。
+      ここで2つのvideoを表示すると、カメラ映像が左右に割れて見えます。
+    */
     #cameraPreview {
       position: fixed !important;
-      inset: 0 !important;
-      width: 100vw !important;
-      height: 100vh !important;
-      object-fit: cover !important;
-      z-index: 0 !important;
+      width: 1px !important;
+      height: 1px !important;
+      left: -9999px !important;
+      top: -9999px !important;
+      opacity: 0 !important;
+      visibility: hidden !important;
       display: block !important;
-      background: #000;
+      pointer-events: none !important;
     }
-    video,
-    video.arjs-video,
-    .arjs-video {
+    video:not(#cameraPreview),
+    video.arjs-video:not(#cameraPreview),
+    .arjs-video:not(#cameraPreview) {
       position: fixed !important;
       inset: 0 !important;
       width: 100vw !important;
@@ -42,6 +48,7 @@
       display: block !important;
       visibility: visible !important;
       opacity: 1 !important;
+      background: #000;
     }
     a-scene {
       position: fixed !important;
@@ -300,7 +307,7 @@
       <div class="modal-header">
         <div>
           <h1 id="menuTitle">動くお絵かきAR</h1>
-          <p>Hiroマーカーの位置に合わせて、魚・クラゲ・自分の絵を表示します。絵はcanvasに描画するため、高さ変更やカメラ距離でひしゃげません。</p>
+          <p>Hiroマーカーの位置に合わせて、魚・クラゲ・自分の絵を表示します。カメラ映像は1つだけ表示し、絵は透明canvasに描画します。</p>
         </div>
         <button class="close-button" id="closeMenu" type="button" aria-label="閉じる">×</button>
       </div>
@@ -455,7 +462,7 @@ function findArVideo() {
 }
 
 function styleCameraVideo(video) {
-  if (!video) return;
+  if (!video || video === cameraPreview) return;
   Object.assign(video.style, {
     position: 'fixed',
     inset: '0px',
@@ -472,23 +479,29 @@ function styleCameraVideo(video) {
   video.muted = true;
 }
 
+function hideFallbackPreview() {
+  Object.assign(cameraPreview.style, {
+    position: 'fixed',
+    width: '1px',
+    height: '1px',
+    left: '-9999px',
+    top: '-9999px',
+    opacity: '0',
+    visibility: 'hidden',
+    pointerEvents: 'none'
+  });
+}
+
 function syncCameraPreview() {
   forceTransparentArCanvas();
+  hideFallbackPreview();
   const arVideo = findArVideo();
   styleCameraVideo(arVideo);
-  styleCameraVideo(cameraPreview);
-
-  if (arVideo && arVideo.srcObject && cameraPreview.srcObject !== arVideo.srcObject) {
-    cameraPreview.srcObject = arVideo.srcObject;
-    cameraPreview.play().catch(() => {});
-  } else if (arVideo && arVideo.src && cameraPreview.src !== arVideo.src && !cameraPreview.srcObject) {
-    cameraPreview.src = arVideo.src;
-    cameraPreview.play().catch(() => {});
-  }
 }
 
 async function ensureCameraPreviewFallback() {
   syncCameraPreview();
+  if (findArVideo()) return;
   if (cameraPreview.srcObject || cameraPreview.src) return;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
   try {
@@ -498,7 +511,7 @@ async function ensureCameraPreviewFallback() {
     });
     cameraPreview.srcObject = stream;
     await cameraPreview.play().catch(() => {});
-    showToast('カメラ表示を復旧');
+    showToast('録画用カメラを準備');
   } catch (error) {
     showToast('カメラを許可してください');
   }
@@ -684,12 +697,10 @@ function drawOverlay(now) {
 
 function getCameraVideo() {
   syncCameraPreview();
-  if (cameraPreview.readyState >= 2 && cameraPreview.videoWidth && cameraPreview.videoHeight) {
-    return cameraPreview;
-  }
   const arVideo = findArVideo();
   if (arVideo && arVideo.readyState >= 2 && arVideo.videoWidth && arVideo.videoHeight) return arVideo;
-  return cameraPreview || arVideo || null;
+  if (cameraPreview.readyState >= 2 && cameraPreview.videoWidth && cameraPreview.videoHeight) return cameraPreview;
+  return arVideo || cameraPreview || null;
 }
 
 function drawVideoCover(ctx, video, w, h) {
