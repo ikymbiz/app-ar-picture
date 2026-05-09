@@ -654,6 +654,8 @@ const state = {
   recordTimer: 0,
   recordStopTimer: 0,
   recordMime: '',
+  recordMimeCandidates: [],
+  recordExtension: 'mp4',
   recordSupported: false,
   recordStartAt: 0,
   recordBlob: null,
@@ -1196,19 +1198,118 @@ function drawContainOverlay(ctx, source, canvasWidth, canvasHeight) {
   ctx.drawImage(source, 0, 0, sw, sh, 0, 0, canvasWidth, canvasHeight);
 }
 
-function detectMp4Support() {
-  // ネイティブにMP4録画できる端末でだけ録画を許可します。
-  // 対応端末では音声と映像をそのままMP4に書き出して保存します。
-  const mp4Types = [
-    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-    'video/mp4;codecs=h264,aac',
-    'video/mp4'
-  ];
-  if (!window.MediaRecorder) return '';
-  return mp4Types.find(type => MediaRecorder.isTypeSupported(type)) || '';
+const RECORD_MIME_TYPES = [
+  'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+  'video/mp4;codecs=h264,aac',
+  'video/mp4;codecs=avc1',
+  'video/mp4',
+  'video/webm;codecs=vp9,opus',
+  'video/webm;codecs=vp8,opus',
+  'video/webm'
+];
+
+function getSupportedRecordMimeCandidates() {
+  if (!window.MediaRecorder) return [];
+  const supported = RECORD_MIME_TYPES.filter(type => {
+    try {
+      return MediaRecorder.isTypeSupported(type);
+    } catch (_) {
+      return false;
+    }
+  });
+
+  // isTypeSupported() が厳しめに false を返すブラウザでも、
+  // MIME指定なしなら録画できる場合があるため最後の候補にします。
+  supported.push('');
+  return supported;
 }
 
+function getRecordExtension(mimeType) {
+  const type = String(mimeType || '').toLowerCase();
+  return type.includes('webm') ? 'webm' : 'mp4';
+}
 
+function getRecordBlobType(mimeType) {
+  const type = String(mimeType || '').toLowerCase();
+  if (type.includes('webm')) return 'video/webm';
+  if (type.includes('mp4')) return 'video/mp4';
+  return 'video/mp4';
+}
+
+async function startMediaRecorderWithFallback(stream, candidates) {
+  let lastError = null;
+
+  for (const mimeType of candidates) {
+    let recorder = null;
+    try {
+      recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      await new Promise((resolve, reject) => {
+        let done = false;
+        let started = false;
+        let settleTimer = 0;
+        let fallbackTimer = 0;
+
+        const cleanup = () => {
+          clearTimeout(settleTimer);
+          clearTimeout(fallbackTimer);
+          recorder.removeEventListener('start', handleStart);
+          recorder.removeEventListener('error', handleError);
+        };
+        const finish = () => {
+          if (done) return;
+          done = true;
+          cleanup();
+          resolve();
+        };
+        const fail = error => {
+          if (done) return;
+          done = true;
+          cleanup();
+          reject(error);
+        };
+        const handleStart = () => {
+          started = true;
+          // 端末によっては start 直後に encoder error が出るため、
+          // 少しだけ待ってから録画成功として扱います。
+          settleTimer = setTimeout(finish, 350);
+        };
+        const handleError = event => {
+          fail(event.error || new Error('MediaRecorder error'));
+        };
+
+        recorder.addEventListener('start', handleStart);
+        recorder.addEventListener('error', handleError);
+
+        try {
+          recorder.start();
+        } catch (error) {
+          fail(error);
+          return;
+        }
+
+        fallbackTimer = setTimeout(() => {
+          if (!started) finish();
+        }, 700);
+      });
+
+      return { recorder, mimeType: recorder.mimeType || mimeType || '' };
+    } catch (error) {
+      lastError = error;
+      try {
+        if (recorder && recorder.state !== 'inactive') recorder.stop();
+      } catch (_) {}
+    }
+  }
+
+  throw lastError || new Error('No supported recording MIME type');
+}
+
+function detectMp4Support() {
+  // 互換性のため関数名は残します。実際にはMP4を優先し、
+  // 失敗時にWebMまたはブラウザ既定形式へフォールバックします。
+  const candidates = getSupportedRecordMimeCandidates();
+  return candidates[0] || '';
+}
 
 const RECORD_MAX_MS = 30000;
 
@@ -1256,9 +1357,10 @@ function closeRecordSaveModal() {
 function showRecordSaveModal(blob) {
   if (state.recordObjectUrl) URL.revokeObjectURL(state.recordObjectUrl);
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const extension = state.recordExtension || getRecordExtension(state.recordMime);
   state.recordBlob = blob;
   state.recordObjectUrl = URL.createObjectURL(blob);
-  state.recordDownloadName = `ar-drawing-${stamp}.mp4`;
+  state.recordDownloadName = `ar-drawing-${stamp}.${extension}`;
   elements.recordPreview.src = state.recordObjectUrl;
   elements.recordSaveModal.classList.add('open');
 }
@@ -1272,11 +1374,10 @@ async function startRecording() {
   elements.recordButton.setAttribute('aria-label', '録画準備中');
   elements.recordLabel.textContent = '録画準備中';
 
-  // ネイティブMP4録画に対応していない端末では録画できません。
-  if (!state.recordMime) {
+  if (!state.recordSupported) {
     state.recordingStatus = 'idle';
     resetRecordUi();
-    alert('このブラウザではMP4録画に対応していません。iPhoneのSafari、または最新のAndroid Chromeで開いてください。');
+    alert('このブラウザでは録画に対応していません。iPhoneのSafari、または最新のAndroid Chromeで開いてください。');
     return;
   }
 
@@ -1336,7 +1437,10 @@ async function startRecording() {
     state.mixedStream = new MediaStream(tracks);
     state.chunks = [];
 
-    state.recorder = new MediaRecorder(state.mixedStream, { mimeType: state.recordMime });
+    const result = await startMediaRecorderWithFallback(state.mixedStream, state.recordMimeCandidates);
+    state.recorder = result.recorder;
+    state.recordMime = result.mimeType;
+    state.recordExtension = getRecordExtension(state.recordMime);
   } catch (error) {
     stopped = true;
     cancelAnimationFrame(state.recordLoop);
@@ -1368,7 +1472,7 @@ async function startRecording() {
       return;
     }
 
-    const blob = new Blob(state.chunks, { type: 'video/mp4' });
+    const blob = new Blob(state.chunks, { type: getRecordBlobType(state.recordMime) });
 
     cleanupRecordingStreams();
     state.recording = false;
@@ -1388,10 +1492,8 @@ async function startRecording() {
     alert('録画中にエラーが発生しました。もう一度お試しください。');
   };
 
-  // MP4はチャンク分割すると断片化MP4(fMP4)となり再生プレイヤーが
-  // 最初のフラグメントしか認識せず「1秒カクカク」現象が起きるため、
-  // タイムスライス引数なしで開始し、stop時に一括で書き出します。
-  state.recorder.start();
+  // チャンク分割せず、stop時に一括で書き出します。
+  // MediaRecorder は startMediaRecorderWithFallback() 内で開始済みです。
   state.recording = true;
   state.recordingStatus = 'recording';
 
@@ -1447,8 +1549,10 @@ elements.recordSaveModal.addEventListener('click', event => {
 });
 
 function applyRecordSupport() {
-  state.recordMime = detectMp4Support();
-  state.recordSupported = !!state.recordMime;
+  state.recordMimeCandidates = getSupportedRecordMimeCandidates();
+  state.recordMime = state.recordMimeCandidates[0] || detectMp4Support();
+  state.recordExtension = getRecordExtension(state.recordMime);
+  state.recordSupported = state.recordMimeCandidates.length > 0;
   resetRecordUi();
   if (!state.recordSupported) {
     elements.recordButton.title = 'iPhoneのSafariまたは最新のAndroid Chromeで開いてください';
