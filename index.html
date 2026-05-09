@@ -31,26 +31,48 @@
       position: fixed !important;
       inset: 0 !important;
       width: 100vw !important;
+      width: 100dvw !important;
       height: 100vh !important;
+      height: 100dvh !important;
       z-index: 1 !important;
       overflow: hidden !important;
+      background: transparent !important;
     }
-    canvas.a-canvas {
+    canvas.a-canvas, .a-canvas {
       position: fixed !important;
-      inset: 0 !important;
+      left: 0 !important;
+      top: 0 !important;
+      right: auto !important;
+      bottom: auto !important;
       width: 100vw !important;
+      width: 100dvw !important;
       height: 100vh !important;
+      height: 100dvh !important;
+      min-width: 100vw !important;
+      min-height: 100vh !important;
       z-index: 2 !important;
       object-fit: cover !important;
+      object-position: center center !important;
+      background: transparent !important;
+      transform: none !important;
     }
-    video {
+    video, #arjs-video, .arjs-video {
       position: fixed !important;
-      inset: 0 !important;
+      left: 0 !important;
+      top: 0 !important;
+      right: auto !important;
+      bottom: auto !important;
       width: 100vw !important;
+      width: 100dvw !important;
       height: 100vh !important;
+      height: 100dvh !important;
+      min-width: 100vw !important;
+      min-height: 100vh !important;
       object-fit: cover !important;
+      object-position: center center !important;
       z-index: 0 !important;
       background: #000 !important;
+      transform: none !important;
     }
 
     .ui {
@@ -146,6 +168,12 @@
     }
     .size-wrap {
       right: max(10px, env(safe-area-inset-right, 0px));
+    }
+    .position-wrap {
+      top: calc(82px + var(--safe-top));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 29;
     }
 
     .pad-title {
@@ -356,6 +384,14 @@
 
   <div id="dragHitArea" aria-label="絵をドラッグして位置調整"></div>
 
+  <div class="ui pad-wrap position-wrap" aria-label="Hiro基準の位置コントロール">
+    <div class="pad-title"><span>位置 横/高さ</span><button id="resetPosition" type="button">戻す</button></div>
+    <div class="pad" id="positionPad">
+      <div class="pad-knob" id="positionKnob"></div>
+    </div>
+    <div class="pad-caption" id="positionCaption">横 0.0 / 高さ 1.0</div>
+  </div>
+
   <div class="ui pad-wrap rotate-wrap" aria-label="回転コントロール">
     <div class="pad-title"><span>回転 X/Y</span><button id="resetRotation" type="button">戻す</button></div>
     <div class="pad" id="rotationPad">
@@ -382,7 +418,7 @@
       <div class="modal-header">
         <div>
           <h1 id="menuTitle">動くお絵かきAR</h1>
-          <p>絵はHiroマーカーに追従します。絵を直接ドラッグすると、Hiro基準の横位置と高さを調整できます。</p>
+          <p>絵はHiroマーカーに追従します。絵を直接ドラッグ、または上部の位置パッドで、Hiro基準の横位置と高さを調整できます。</p>
         </div>
         <button class="close-button" id="closeMenu" type="button" aria-label="閉じる">×</button>
       </div>
@@ -534,6 +570,10 @@ const elements = {
   sizeKnob: document.getElementById('sizeKnob'),
   sizeCaption: document.getElementById('sizeCaption'),
   resetSize: document.getElementById('resetSize'),
+  positionPad: document.getElementById('positionPad'),
+  positionKnob: document.getElementById('positionKnob'),
+  positionCaption: document.getElementById('positionCaption'),
+  resetPosition: document.getElementById('resetPosition'),
   dragHitArea: document.getElementById('dragHitArea'),
   toast: document.getElementById('toast')
 };
@@ -592,6 +632,7 @@ function updateArtTransform() {
   const rotY = Math.round(state.rotY);
   elements.rotationCaption.textContent = `X ${rotX}° / Y ${rotY}°`;
   elements.sizeCaption.textContent = `幅 ${state.widthScale.toFixed(2)} / 高さ ${state.heightScale.toFixed(2)}`;
+  elements.positionCaption.textContent = `横 ${state.offsetX.toFixed(1)} / 高さ ${state.offsetY.toFixed(1)}`;
 }
 
 function setMotion(type) {
@@ -665,9 +706,15 @@ function resetSize() {
   updateArtTransform();
 }
 
-function resetAll() {
+function resetPosition() {
   state.offsetX = 0;
   state.offsetY = 1;
+  syncPositionKnob();
+  updateArtTransform();
+}
+
+function resetAll() {
+  resetPosition();
   resetRotation();
   resetSize();
   setMotion(elements.motion.value);
@@ -676,6 +723,7 @@ function resetAll() {
 
 elements.resetRotation.addEventListener('click', resetRotation);
 elements.resetSize.addEventListener('click', resetSize);
+elements.resetPosition.addEventListener('click', resetPosition);
 elements.resetAll.addEventListener('click', resetAll);
 
 function makePad(pad, knob, onValue) {
@@ -712,6 +760,12 @@ makePad(elements.rotationPad, elements.rotationKnob, (x, y) => {
   updateArtTransform();
 });
 
+makePad(elements.positionPad, elements.positionKnob, (x, y) => {
+  state.offsetX = clamp(x * 3.5, -3.5, 3.5);
+  state.offsetY = clamp(2.75 - y * 3.25, -0.5, 6.0);
+  updateArtTransform();
+});
+
 makePad(elements.sizePad, elements.sizeKnob, (x, y) => {
   state.widthScale = 0.25 + ((x + 1) / 2) * 2.75;
   state.heightScale = 0.25 + ((1 - y) / 2) * 2.75;
@@ -732,6 +786,13 @@ function syncSizeKnob() {
   elements.sizeKnob.style.top = `${((clamp(y, -1, 1) + 1) / 2) * 100}%`;
 }
 
+function syncPositionKnob() {
+  const x = clamp(state.offsetX / 3.5, -1, 1);
+  const y = clamp((2.75 - state.offsetY) / 3.25, -1, 1);
+  elements.positionKnob.style.left = `${((x + 1) / 2) * 100}%`;
+  elements.positionKnob.style.top = `${((y + 1) / 2) * 100}%`;
+}
+
 function findArVideo() {
   return document.querySelector('video#arjs-video') ||
          document.querySelector('.arjs-video') ||
@@ -744,23 +805,71 @@ function findArCanvas() {
          document.querySelector('canvas');
 }
 
+function setImportantStyle(el, styles) {
+  if (!el) return;
+  for (const [key, value] of Object.entries(styles)) {
+    el.style.setProperty(key, value, 'important');
+  }
+}
+
 function forceFullscreenLayers() {
+  const viewportW = `${window.innerWidth}px`;
+  const viewportH = `${window.innerHeight}px`;
+  const common = {
+    position: 'fixed',
+    left: '0',
+    top: '0',
+    right: 'auto',
+    bottom: 'auto',
+    width: '100vw',
+    height: '100vh',
+    'min-width': '100vw',
+    'min-height': '100vh',
+    'max-width': 'none',
+    'max-height': 'none',
+    transform: 'none',
+    margin: '0'
+  };
+
+  setImportantStyle(elements.scene, {
+    position: 'fixed',
+    left: '0',
+    top: '0',
+    width: '100vw',
+    height: '100vh',
+    overflow: 'hidden',
+    background: 'transparent'
+  });
+
   const video = findArVideo();
   if (video) {
-    video.style.position = 'fixed';
-    video.style.inset = '0';
-    video.style.width = '100vw';
-    video.style.height = '100vh';
-    video.style.objectFit = 'cover';
-    video.style.zIndex = '0';
+    setImportantStyle(video, {
+      ...common,
+      'object-fit': 'cover',
+      'object-position': 'center center',
+      'z-index': '0',
+      background: '#000'
+    });
+    video.setAttribute('playsinline', 'true');
+    video.setAttribute('webkit-playsinline', 'true');
   }
+
   const canvas = findArCanvas();
   if (canvas) {
-    canvas.style.position = 'fixed';
-    canvas.style.inset = '0';
-    canvas.style.width = '100vw';
-    canvas.style.height = '100vh';
-    canvas.style.zIndex = '2';
+    setImportantStyle(canvas, {
+      ...common,
+      'object-fit': 'cover',
+      'object-position': 'center center',
+      'z-index': '2',
+      background: 'transparent'
+    });
+  }
+
+  if (elements.scene && elements.scene.renderer) {
+    try {
+      elements.scene.renderer.setSize(window.innerWidth, window.innerHeight, false);
+      elements.scene.renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+    } catch (_) {}
   }
 }
 
@@ -823,6 +932,7 @@ elements.dragHitArea.addEventListener('pointermove', event => {
   const scale = 0.006;
   state.offsetX = clamp(dragState.startOffsetX + dx * scale, -3.5, 3.5);
   state.offsetY = clamp(dragState.startOffsetY - dy * scale, -0.5, 6.0);
+  syncPositionKnob();
   updateArtTransform();
 });
 
@@ -994,6 +1104,7 @@ window.addEventListener('load', () => {
   setMotion('float');
   syncRotationKnob();
   syncSizeKnob();
+  syncPositionKnob();
   markerVisibilityLoop();
 });
 </script>
