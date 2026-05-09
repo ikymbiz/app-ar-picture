@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="dd-learn AR marker">
+  <rect width="1024" height="1024" fill="#fff"/>
+  <rect x="64" y="64" width="896" height="896" fill="#000"/>
+  <rect x="240" y="240" width="544" height="544" fill="#fff"/>
+  <rect x="284" y="284" width="134" height="134" rx="34" fill="#000"/>
+  <circle cx="668" cy="364" r="74" fill="#000"/>
+  <path d="M306 714 L460 714 L372 564 Z" fill="#000"/>
+  <rect x="574" y="626" width="166" height="100" fill="#000"/>
+  <text x="512" y="548" text-anchor="middle" font-size="92" font-family="Arial, Helvetica, sans-serif" font-weight="900" fill="#000">dd-learn</text>
+</svg>
