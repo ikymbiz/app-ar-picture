@@ -39,12 +39,13 @@
       bottom: 10px;
       z-index: 35;
       color: #fff;
-      background: rgba(7, 10, 18, .72);
-      border: 1px solid rgba(255,255,255,.18);
-      border-radius: 18px;
-      padding: 10px 12px 12px;
-      backdrop-filter: blur(12px);
-      box-shadow: 0 12px 36px rgba(0,0,0,.35);
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      padding: 0 12px 6px;
+      backdrop-filter: none;
+      box-shadow: none;
+      text-shadow: 0 2px 6px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,.9);
     }
     .live-title {
       display: flex;
@@ -68,8 +69,9 @@
       align-items: center;
       padding: 5px 0;
       font-size: 13px;
+      background: transparent;
     }
-    .control input { width: 100%; }
+    .control input { width: 100%; background: transparent; }
     .control b { text-align: right; font-variant-numeric: tabular-nums; }
     .modal-backdrop {
       position: fixed;
@@ -265,13 +267,25 @@
     <a-marker id="hiroMarker" preset="hiro" smooth="true" smoothCount="8" smoothTolerance="0.01" smoothThreshold="5"></a-marker>
 
     <a-entity id="lastAnchor" visible="false">
-      <a-entity id="artworkGroup" position="0 1.0 0" rotation="0 0 0" scale="1.2 1.2 1.2">
-        <a-entity
-          id="drawing"
-          geometry="primitive:plane; width:1; height:1"
-          material="transparent:true; side:double; alphaTest:0.03"
-          rotation="-90 0 0"
-        ></a-entity>
+      <!--
+        分離構造:
+        - artworkPlacement: 高さ・横位置・回転だけ
+        - motionGroup: ふわふわ/泳ぐ/ジャンプなどの動きだけ
+        - artworkSizer: 均等な大きさ変更だけ
+        - drawing: 元画像の縦横比を固定した平面
+        これにより、高さを上げても絵はひしゃげません。
+      -->
+      <a-entity id="artworkPlacement" position="0 1.0 0" rotation="0 0 0">
+        <a-entity id="motionGroup" position="0 0 0" rotation="0 0 0">
+          <a-entity id="artworkSizer" scale="1.2 1.2 1.2">
+            <a-entity
+              id="drawing"
+              geometry="primitive:plane; width:1; height:1"
+              material="transparent:true; side:double; alphaTest:0.03"
+              rotation="-90 0 0"
+            ></a-entity>
+          </a-entity>
+        </a-entity>
       </a-entity>
     </a-entity>
 
@@ -317,7 +331,9 @@ const jellyfishSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height
 
 
 const drawing = document.getElementById('drawing');
-const artworkGroup = document.getElementById('artworkGroup');
+const artworkPlacement = document.getElementById('artworkPlacement');
+const motionGroup = document.getElementById('motionGroup');
+const artworkSizer = document.getElementById('artworkSizer');
 const anchor = document.getElementById('lastAnchor');
 const preset = document.getElementById('preset');
 const motion = document.getElementById('motion');
@@ -392,8 +408,11 @@ async function setArtworkFromSvg(name, svg) {
 }
 
 function setArtworkTexture(src, ratio = 1) {
-  const width = ratio >= 1 ? 1 : ratio;
-  const planeHeight = ratio >= 1 ? 1 / ratio : 1;
+  // 元画像の縦横比を維持し、基準の「高さ」は常に1に固定します。
+  // 高さスライダーは配置位置だけを動かし、絵のgeometryやscaleは変えません。
+  const safeRatio = Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
+  const width = safeRatio;
+  const planeHeight = 1;
   drawing.setAttribute('geometry', `primitive:plane; width:${width}; height:${planeHeight}`);
   drawing.setAttribute('material', {
     src,
@@ -422,37 +441,39 @@ function updateLabels() {
 }
 
 function clearAnimations() {
-  artworkGroup.removeAttribute('animation__float');
-  artworkGroup.removeAttribute('animation__swim');
-  artworkGroup.removeAttribute('animation__spin');
-  artworkGroup.removeAttribute('animation__jump');
+  motionGroup.removeAttribute('animation__float');
+  motionGroup.removeAttribute('animation__swim');
+  motionGroup.removeAttribute('animation__spin');
+  motionGroup.removeAttribute('animation__jump');
 }
 
 function setBaseTransform() {
   const v = values();
   updateLabels();
-  artworkGroup.setAttribute('position', `${v.x.toFixed(2)} ${v.h.toFixed(2)} 0`);
-  // 絵の縦横比を壊さないため、X/Y/Zを同じ値で拡大縮小します。
-  artworkGroup.setAttribute('scale', `${v.s.toFixed(3)} ${v.s.toFixed(3)} ${v.s.toFixed(3)}`);
-  artworkGroup.setAttribute('rotation', `0 ${v.r.toFixed(1)} 0`);
+  // 高さ・横位置は「配置位置」だけを変更します。画像の高さや縦横比は変えません。
+  artworkPlacement.setAttribute('position', `${v.x.toFixed(2)} ${v.h.toFixed(2)} 0`);
+  artworkPlacement.setAttribute('rotation', `0 ${v.r.toFixed(1)} 0`);
+  // 大きさはX/Y/Zを同じ値で均等に変更します。ひしゃげ防止のため非等倍scaleは使いません。
+  artworkSizer.setAttribute('scale', `${v.s.toFixed(3)} ${v.s.toFixed(3)} ${v.s.toFixed(3)}`);
+  motionGroup.setAttribute('position', '0 0 0');
+  motionGroup.setAttribute('rotation', '0 0 0');
 }
 
 function applyMotion(type) {
   clearAnimations();
   setBaseTransform();
-  const v = values();
 
   if (type === 'still') {
     return;
   }
   if (type === 'float') {
-    artworkGroup.setAttribute('animation__float', `property: position; from: ${v.x.toFixed(2)} ${v.h.toFixed(2)} 0; to: ${v.x.toFixed(2)} ${(v.h + 0.45).toFixed(2)} 0; dir: alternate; dur: 1100; easing: easeInOutSine; loop: true`);
+    motionGroup.setAttribute('animation__float', 'property: position; from: 0 0 0; to: 0 0.45 0; dir: alternate; dur: 1100; easing: easeInOutSine; loop: true');
   } else if (type === 'swim') {
-    artworkGroup.setAttribute('animation__swim', `property: position; from: ${v.x.toFixed(2)} ${v.h.toFixed(2)} 0; to: ${(v.x + 0.65).toFixed(2)} ${v.h.toFixed(2)} 0; dir: alternate; dur: 1300; easing: easeInOutSine; loop: true`);
+    motionGroup.setAttribute('animation__swim', 'property: position; from: -0.32 0 0; to: 0.32 0 0; dir: alternate; dur: 1300; easing: easeInOutSine; loop: true');
   } else if (type === 'spin') {
-    artworkGroup.setAttribute('animation__spin', `property: rotation; from: 0 ${v.r.toFixed(1)} 0; to: 0 ${(v.r + 360).toFixed(1)} 0; dur: 1800; easing: linear; loop: true`);
+    motionGroup.setAttribute('animation__spin', 'property: rotation; from: 0 0 0; to: 0 360 0; dur: 1800; easing: linear; loop: true');
   } else if (type === 'jump') {
-    artworkGroup.setAttribute('animation__jump', `property: position; from: ${v.x.toFixed(2)} ${v.h.toFixed(2)} 0; to: ${v.x.toFixed(2)} ${(v.h + 0.85).toFixed(2)} 0; dir: alternate; dur: 520; easing: easeOutQuad; loop: true`);
+    motionGroup.setAttribute('animation__jump', 'property: position; from: 0 0 0; to: 0 0.85 0; dir: alternate; dur: 520; easing: easeOutQuad; loop: true');
   }
 }
 
