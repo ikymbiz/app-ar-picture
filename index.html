@@ -411,6 +411,54 @@
 
     #recordCanvas { display: none; }
 
+    .record-save-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 55;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(0,0,0,.62);
+      backdrop-filter: blur(5px);
+    }
+    .record-save-backdrop.open { display: flex; }
+    .record-save-modal {
+      width: min(520px, 100%);
+      max-height: min(86vh, 720px);
+      overflow: auto;
+      color: #fff;
+      background: rgba(14,14,18,.96);
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 22px;
+      box-shadow: 0 20px 70px rgba(0,0,0,.46);
+      padding: 18px;
+      text-align: center;
+    }
+    .record-save-modal h2 {
+      margin: 0 0 8px;
+      font-size: 19px;
+    }
+    .record-preview {
+      display: block;
+      width: 100%;
+      max-height: 52vh;
+      margin: 12px 0;
+      border-radius: 16px;
+      background: #000;
+    }
+    .record-save-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 12px;
+    }
+    .record-save-button {
+      background: #1d4ed8;
+      color: #fff;
+    }
+
     @media (max-width: 430px) {
       .pad-wrap { width: 108px; }
       .pad { width: 108px; height: 108px; border-radius: 20px; }
@@ -501,13 +549,25 @@
           <a class="primary-link" href="hiro-marker-print.html" target="_blank" rel="noopener">Hiroを印刷</a>
           <button class="danger" id="resetAll" type="button">全部リセット</button>
         </div>
-        <p class="small">録画は下部中央のボタンで開始・停止します。録画中も、回転・高さ・大きさ・位置の調整を続けられます。停止後、自動でMP4が保存されます。録画にUIは入りません。</p>
+        <p class="small">録画は下部中央のボタンで開始・停止します。録画は最大30秒です。録画中も、回転・高さ・大きさ・位置の調整を続けられます。停止後、保存ボタンを表示します。録画にUIは入りません。</p>
         <p class="small">録画にはマイクの許可が必要です(音声入り)。MP4録画に対応していない端末では録画ボタンが無効になります。iPhoneのSafari、または最新のAndroid Chromeをお使いください。</p>
       </div>
     </section>
   </div>
 
   <canvas id="recordCanvas"></canvas>
+
+  <div class="record-save-backdrop" id="recordSaveModal" role="dialog" aria-modal="true" aria-labelledby="recordSaveTitle">
+    <section class="record-save-modal">
+      <h2 id="recordSaveTitle">録画が完了しました</h2>
+      <p class="small">動画を確認してから保存できます。保存されない場合は、動画を長押しして保存してください。</p>
+      <video class="record-preview" id="recordPreview" controls playsinline webkit-playsinline></video>
+      <div class="record-save-actions">
+        <button class="record-save-button" id="recordSaveButton" type="button">動画を保存</button>
+        <button id="recordCloseSave" type="button">閉じる</button>
+      </div>
+    </section>
+  </div>
 
   <a-scene
     embedded
@@ -585,14 +645,20 @@ const state = {
   markerVisible: false,
   wasVisible: false,
   recording: false,
+  recordingStatus: 'idle',
   recorder: null,
   chunks: [],
   mixedStream: null,
   micStream: null,
   recordLoop: 0,
+  recordTimer: 0,
+  recordStopTimer: 0,
   recordMime: '',
   recordSupported: false,
   recordStartAt: 0,
+  recordBlob: null,
+  recordObjectUrl: '',
+  recordDownloadName: '',
   lastToastAt: 0,
   motion: 'float'
 };
@@ -615,6 +681,10 @@ const elements = {
   recordButton: document.getElementById('recordButton'),
   recordLabel: document.getElementById('recordLabel'),
   recordCanvas: document.getElementById('recordCanvas'),
+  recordSaveModal: document.getElementById('recordSaveModal'),
+  recordPreview: document.getElementById('recordPreview'),
+  recordSaveButton: document.getElementById('recordSaveButton'),
+  recordCloseSave: document.getElementById('recordCloseSave'),
   rotationPad: document.getElementById('rotationPad'),
   rotationKnob: document.getElementById('rotationKnob'),
   rotationCaption: document.getElementById('rotationCaption'),
@@ -1140,18 +1210,83 @@ function detectMp4Support() {
 
 
 
+const RECORD_MAX_MS = 30000;
+
+function cleanupRecordingTimers() {
+  clearInterval(state.recordTimer);
+  clearTimeout(state.recordStopTimer);
+  state.recordTimer = 0;
+  state.recordStopTimer = 0;
+}
+
+function cleanupRecordingStreams() {
+  if (state.micStream) state.micStream.getTracks().forEach(track => track.stop());
+  if (state.mixedStream) state.mixedStream.getTracks().forEach(track => track.stop());
+  state.micStream = null;
+  state.mixedStream = null;
+}
+
+function resetRecordUi() {
+  elements.recordButton.classList.remove('recording');
+  elements.recordButton.disabled = !state.recordSupported;
+  elements.recordButton.style.opacity = state.recordSupported ? '' : '0.45';
+  elements.recordButton.style.cursor = state.recordSupported ? '' : 'not-allowed';
+  elements.recordButton.setAttribute('aria-label', state.recordSupported ? '録画開始' : 'このブラウザでは録画できません');
+  elements.recordLabel.textContent = state.recordSupported ? '録画開始' : '録画は非対応';
+}
+
+function updateRecordCountdown() {
+  if (!state.recording) return;
+  const elapsed = performance.now() - state.recordStartAt;
+  const remaining = Math.max(0, Math.ceil((RECORD_MAX_MS - elapsed) / 1000));
+  elements.recordLabel.textContent = `録画停止 ${remaining}秒`;
+}
+
+function closeRecordSaveModal() {
+  elements.recordSaveModal.classList.remove('open');
+  elements.recordPreview.pause();
+  elements.recordPreview.removeAttribute('src');
+  elements.recordPreview.load();
+  if (state.recordObjectUrl) URL.revokeObjectURL(state.recordObjectUrl);
+  state.recordBlob = null;
+  state.recordObjectUrl = '';
+  state.recordDownloadName = '';
+}
+
+function showRecordSaveModal(blob) {
+  if (state.recordObjectUrl) URL.revokeObjectURL(state.recordObjectUrl);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  state.recordBlob = blob;
+  state.recordObjectUrl = URL.createObjectURL(blob);
+  state.recordDownloadName = `ar-drawing-${stamp}.mp4`;
+  elements.recordPreview.src = state.recordObjectUrl;
+  elements.recordSaveModal.classList.add('open');
+}
+
 async function startRecording() {
-  if (state.recording) return;
+  if (state.recordingStatus !== 'idle') return;
+  state.recordingStatus = 'starting';
+  elements.recordButton.disabled = true;
+  elements.recordButton.style.opacity = '0.65';
+  elements.recordButton.style.cursor = 'wait';
+  elements.recordButton.setAttribute('aria-label', '録画準備中');
+  elements.recordLabel.textContent = '録画準備中';
 
   // ネイティブMP4録画に対応していない端末では録画できません。
   if (!state.recordMime) {
+    state.recordingStatus = 'idle';
+    resetRecordUi();
     alert('このブラウザではMP4録画に対応していません。iPhoneのSafari、または最新のAndroid Chromeで開いてください。');
     return;
   }
 
+  closeRecordSaveModal();
+
   const arVideo = findRecordingVideo();
   const arCanvas = findArCanvas();
   if (!arVideo || !arCanvas) {
+    state.recordingStatus = 'idle';
+    resetRecordUi();
     alert('録画に必要なAR映像が見つかりません。ページを再読み込みしてから試してください。');
     return;
   }
@@ -1161,59 +1296,56 @@ async function startRecording() {
   try {
     micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
   } catch (_) {
+    state.recordingStatus = 'idle';
+    resetRecordUi();
     alert('マイクの使用が許可されませんでした。ブラウザの設定からマイクを許可してください。');
     return;
   }
-  const liveAudio = micStream.getAudioTracks().some(track => track.readyState === 'live');
-  if (!liveAudio) {
-    micStream.getTracks().forEach(track => track.stop());
-    alert('マイクから音声を取得できませんでした。別のブラウザで試してください。');
-    return;
-  }
-
-  state.recordStartAt = performance.now();
-
-  const w = Math.min(1280, Math.max(640, window.innerWidth));
-  const h = Math.round(w * (window.innerHeight / window.innerWidth));
-  elements.recordCanvas.width = w;
-  elements.recordCanvas.height = h;
-  const ctx = elements.recordCanvas.getContext('2d');
 
   let stopped = false;
-  const renderFrame = () => {
-    if (stopped) return;
-    ctx.clearRect(0, 0, w, h);
-    drawCover(ctx, arVideo, w, h);
-    drawContainOverlay(ctx, arCanvas, w, h);
-    state.recordLoop = requestAnimationFrame(renderFrame);
-  };
-  renderFrame();
-
-  const videoStream = elements.recordCanvas.captureStream(30);
-  const tracks = [...videoStream.getVideoTracks(), ...micStream.getAudioTracks()];
-  state.micStream = micStream;
-  state.mixedStream = new MediaStream(tracks);
-  state.chunks = [];
-
-  const cleanupStreams = () => {
-    if (state.micStream) state.micStream.getTracks().forEach(track => track.stop());
-    if (state.mixedStream) state.mixedStream.getTracks().forEach(track => track.stop());
-    state.micStream = null;
-    state.mixedStream = null;
-  };
-
-  const resetRecordUi = () => {
-    elements.recordButton.classList.remove('recording');
-    elements.recordButton.setAttribute('aria-label', '録画開始');
-    elements.recordLabel.textContent = '録画開始';
-  };
-
   try {
+    const liveAudio = micStream.getAudioTracks().some(track => track.readyState === 'live');
+    if (!liveAudio) {
+      micStream.getTracks().forEach(track => track.stop());
+      state.recordingStatus = 'idle';
+      resetRecordUi();
+      alert('マイクから音声を取得できませんでした。別のブラウザで試してください。');
+      return;
+    }
+
+    state.recordStartAt = performance.now();
+
+    const w = Math.min(1280, Math.max(640, window.innerWidth));
+    const h = Math.round(w * (window.innerHeight / window.innerWidth));
+    elements.recordCanvas.width = w;
+    elements.recordCanvas.height = h;
+    const ctx = elements.recordCanvas.getContext('2d');
+
+    const renderFrame = () => {
+      if (stopped) return;
+      ctx.clearRect(0, 0, w, h);
+      drawCover(ctx, arVideo, w, h);
+      drawContainOverlay(ctx, arCanvas, w, h);
+      state.recordLoop = requestAnimationFrame(renderFrame);
+    };
+    renderFrame();
+
+    const videoStream = elements.recordCanvas.captureStream(30);
+    const tracks = [...videoStream.getVideoTracks(), ...micStream.getAudioTracks()];
+    state.micStream = micStream;
+    state.mixedStream = new MediaStream(tracks);
+    state.chunks = [];
+
     state.recorder = new MediaRecorder(state.mixedStream, { mimeType: state.recordMime });
   } catch (error) {
     stopped = true;
     cancelAnimationFrame(state.recordLoop);
-    cleanupStreams();
+    if (micStream) micStream.getTracks().forEach(track => track.stop());
+    cleanupRecordingStreams();
+    cleanupRecordingTimers();
+    state.recording = false;
+    state.recordingStatus = 'idle';
+    resetRecordUi();
     alert('このブラウザでは録画を開始できませんでした。別のブラウザで試してください。');
     return;
   }
@@ -1225,29 +1357,35 @@ async function startRecording() {
   state.recorder.onstop = () => {
     stopped = true;
     cancelAnimationFrame(state.recordLoop);
+    cleanupRecordingTimers();
 
     if (state.chunks.length === 0) {
-      cleanupStreams();
+      cleanupRecordingStreams();
       state.recording = false;
+      state.recordingStatus = 'idle';
       resetRecordUi();
       alert('録画データを取得できませんでした。もう一度お試しください。');
       return;
     }
 
     const blob = new Blob(state.chunks, { type: 'video/mp4' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    a.href = url;
-    a.download = `ar-drawing-${stamp}.mp4`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1500);
 
-    cleanupStreams();
+    cleanupRecordingStreams();
     state.recording = false;
+    state.recordingStatus = 'idle';
     resetRecordUi();
+    showRecordSaveModal(blob);
+  };
+
+  state.recorder.onerror = () => {
+    stopped = true;
+    cancelAnimationFrame(state.recordLoop);
+    cleanupRecordingTimers();
+    cleanupRecordingStreams();
+    state.recording = false;
+    state.recordingStatus = 'idle';
+    resetRecordUi();
+    alert('録画中にエラーが発生しました。もう一度お試しください。');
   };
 
   // MP4はチャンク分割すると断片化MP4(fMP4)となり再生プレイヤーが
@@ -1255,11 +1393,17 @@ async function startRecording() {
   // タイムスライス引数なしで開始し、stop時に一括で書き出します。
   state.recorder.start();
   state.recording = true;
+  state.recordingStatus = 'recording';
 
   // 録画中も各UIをそのまま操作できるよう、調整UIは無効化しません。
+  elements.recordButton.disabled = false;
+  elements.recordButton.style.opacity = '';
+  elements.recordButton.style.cursor = '';
   elements.recordButton.classList.add('recording');
   elements.recordButton.setAttribute('aria-label', '録画停止');
-  elements.recordLabel.textContent = '録画停止';
+  updateRecordCountdown();
+  state.recordTimer = setInterval(updateRecordCountdown, 250);
+  state.recordStopTimer = setTimeout(stopRecording, RECORD_MAX_MS);
 }
 
 function stopRecording() {
@@ -1267,6 +1411,12 @@ function stopRecording() {
   // 誤タップやブラウザの連続clickで即停止しないよう、開始直後は停止を無視します。
   if (performance.now() - state.recordStartAt < 800) return;
   if (state.recorder.state !== 'inactive') {
+    state.recordingStatus = 'stopping';
+    elements.recordButton.disabled = true;
+    elements.recordButton.style.opacity = '0.65';
+    elements.recordButton.style.cursor = 'wait';
+    elements.recordLabel.textContent = '保存準備中';
+    cleanupRecordingTimers();
     // requestData() は呼ばない。MP4ではチャンク分割が断片化MP4を生み、
     // 再生プレイヤーが最初のフラグメントだけしか読まない不具合になります。
     state.recorder.stop();
@@ -1281,15 +1431,26 @@ elements.recordButton.addEventListener('click', () => {
   }
 });
 
+elements.recordSaveButton.addEventListener('click', () => {
+  if (!state.recordObjectUrl) return;
+  const a = document.createElement('a');
+  a.href = state.recordObjectUrl;
+  a.download = state.recordDownloadName || 'ar-drawing.mp4';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+});
+
+elements.recordCloseSave.addEventListener('click', closeRecordSaveModal);
+elements.recordSaveModal.addEventListener('click', event => {
+  if (event.target === elements.recordSaveModal) closeRecordSaveModal();
+});
+
 function applyRecordSupport() {
   state.recordMime = detectMp4Support();
   state.recordSupported = !!state.recordMime;
+  resetRecordUi();
   if (!state.recordSupported) {
-    elements.recordButton.disabled = true;
-    elements.recordButton.style.opacity = '0.45';
-    elements.recordButton.style.cursor = 'not-allowed';
-    elements.recordButton.setAttribute('aria-label', 'このブラウザでは録画できません');
-    elements.recordLabel.textContent = '録画は非対応';
     elements.recordButton.title = 'iPhoneのSafariまたは最新のAndroid Chromeで開いてください';
   }
 }
