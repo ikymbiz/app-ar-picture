@@ -46,8 +46,16 @@
       background: #000 !important;
       pointer-events: none !important;
     }
-    .a-enter-vr, .a-enter-vr-button {
+    .a-enter-vr,
+    .a-enter-vr-button,
+    button.a-enter-vr-button,
+    [class*="a-enter-vr"],
+    [title="Enter VR mode"],
+    [title*="VR"] {
       display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
     }
 
     a-scene {
@@ -193,6 +201,36 @@
       right: max(10px, env(safe-area-inset-right, 0px));
     }
     .position-wrap { display: none !important; }
+
+    .flip-control {
+      margin-bottom: 7px;
+      padding: 5px 7px 6px;
+      border-radius: 14px;
+      background: rgba(0,0,0,.18);
+      border: 1px solid rgba(255,255,255,.22);
+      backdrop-filter: blur(3px);
+    }
+    .flip-control-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      margin-bottom: 2px;
+      font-size: 11px;
+      font-weight: 850;
+    }
+    .flip-control input {
+      width: 100%;
+      margin: 0;
+      accent-color: #fff;
+      touch-action: pan-x;
+    }
+    .flip-caption {
+      font-size: 10px;
+      font-weight: 800;
+      text-align: center;
+      opacity: .9;
+    }
 
     .pad-title {
       display: flex;
@@ -412,6 +450,11 @@
   </div>
 
   <div class="ui pad-wrap rotate-wrap" aria-label="回転コントロール">
+    <div class="flip-control" aria-label="絵の向きコントロール">
+      <div class="flip-control-row"><span>向き</span><span id="flipLabel">左向き</span></div>
+      <input id="flipSlider" type="range" min="0" max="1" step="1" value="0" aria-label="絵の左右反転">
+      <div class="flip-caption">左 ←→ 右</div>
+    </div>
     <div class="pad-title"><span>回転 X/Y</span><button id="resetRotation" type="button">戻す</button></div>
     <div class="pad" id="rotationPad">
       <div class="pad-knob" id="rotationKnob"></div>
@@ -548,6 +591,7 @@ const state = {
   rotY: 0,
   widthScale: 1.35,
   heightScale: 1,
+  flipX: 1,
   baseRatio: 1,
   markerVisible: false,
   wasVisible: false,
@@ -585,6 +629,8 @@ const elements = {
   rotationKnob: document.getElementById('rotationKnob'),
   rotationCaption: document.getElementById('rotationCaption'),
   resetRotation: document.getElementById('resetRotation'),
+  flipSlider: document.getElementById('flipSlider'),
+  flipLabel: document.getElementById('flipLabel'),
   sizePad: document.getElementById('sizePad'),
   sizeKnob: document.getElementById('sizeKnob'),
   sizeCaption: document.getElementById('sizeCaption'),
@@ -643,6 +689,7 @@ window.addEventListener('keydown', event => {
 function updateArtTransform() {
   elements.artRoot.setAttribute('position', `${state.offsetX.toFixed(3)} ${state.offsetY.toFixed(3)} 0`);
   elements.artPlane.setAttribute('rotation', `${(-90 + state.rotX).toFixed(2)} ${state.rotY.toFixed(2)} 0`);
+  elements.artPlane.setAttribute('scale', `${state.flipX} 1 1`);
   elements.artPlane.setAttribute(
     'geometry',
     `primitive:plane; width:${state.widthScale.toFixed(3)}; height:${state.heightScale.toFixed(3)}`
@@ -653,7 +700,9 @@ function updateArtTransform() {
   elements.rotationCaption.textContent = `X ${rotX}° / Y ${rotY}°`;
   elements.sizeCaption.textContent = `幅 ${state.widthScale.toFixed(2)} / 高さ ${state.heightScale.toFixed(2)}`;
   elements.positionCaption.textContent = `横 ${state.offsetX.toFixed(1)} / 高さ ${state.offsetY.toFixed(1)}`;
+  elements.flipLabel.textContent = state.flipX < 0 ? '右向き' : '左向き';
 }
+
 
 function setMotion(type) {
   state.motion = type;
@@ -736,12 +785,18 @@ function resetPosition() {
 function resetAll() {
   resetPosition();
   resetRotation();
+  state.flipX = 1;
+  elements.flipSlider.value = '0';
   resetSize();
   setMotion(elements.motion.value);
   closeModal();
 }
 
 elements.resetRotation.addEventListener('click', resetRotation);
+elements.flipSlider.addEventListener('input', event => {
+  state.flipX = event.target.value === '1' ? -1 : 1;
+  updateArtTransform();
+});
 elements.resetSize.addEventListener('click', resetSize);
 elements.resetPosition.addEventListener('click', resetPosition);
 elements.resetAll.addEventListener('click', resetAll);
@@ -870,7 +925,23 @@ function syncCameraMirror(arVideo) {
   } catch (_) {}
 }
 
+function hideVrButton() {
+  const candidates = document.querySelectorAll('.a-enter-vr, .a-enter-vr-button, [class*="a-enter-vr"], [title*="VR"], [title="Enter VR mode"], button, div');
+  for (const el of candidates) {
+    const text = (el.textContent || '').trim();
+    const title = (el.getAttribute && el.getAttribute('title')) || '';
+    const cls = (el.className && String(el.className)) || '';
+    if (cls.includes('a-enter-vr') || title.includes('VR') || title === 'Enter VR mode' || text === 'VR') {
+      el.style.setProperty('display', 'none', 'important');
+      el.style.setProperty('visibility', 'hidden', 'important');
+      el.style.setProperty('opacity', '0', 'important');
+      el.style.setProperty('pointer-events', 'none', 'important');
+    }
+  }
+}
+
 function forceFullscreenLayers() {
+  hideVrButton();
   const { w, h } = viewportSize();
   const full = {
     position: 'fixed',
