@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>動くお絵かきAR - Hiro全画面録画版</title>
+  <title>動くお絵かきAR - Hiro録画AR版</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   <style>
@@ -22,7 +22,6 @@
       -webkit-user-select: none;
     }
 
-    /* AR.jsのカメラ映像を1枚だけ、必ず画面いっぱいに広げる */
     video,
     #arjs-video,
     .arjs-video,
@@ -30,8 +29,6 @@
       position: fixed !important;
       top: 0 !important;
       left: 0 !important;
-      right: 0 !important;
-      bottom: 0 !important;
       width: 100vw !important;
       height: 100vh !important;
       min-width: 100vw !important;
@@ -54,7 +51,7 @@
       inset: 0 !important;
       width: 100vw !important;
       height: 100vh !important;
-      z-index: 2 !important;
+      z-index: 10 !important;
       pointer-events: none !important;
       background: transparent !important;
     }
@@ -65,23 +62,14 @@
       width: 100vw !important;
       height: 100vh !important;
       background: transparent !important;
-      opacity: 0 !important;
+      opacity: 1 !important;
       pointer-events: none !important;
+      z-index: 10 !important;
     }
     .a-enter-vr, .a-orientation-modal, .rs-base, .a-loader-title {
       display: none !important;
       visibility: hidden !important;
       opacity: 0 !important;
-    }
-
-    #artCanvas {
-      position: fixed;
-      inset: 0;
-      width: 100vw;
-      height: 100vh;
-      z-index: 20;
-      pointer-events: none;
-      background: transparent;
     }
 
     .menu-button {
@@ -100,133 +88,157 @@
       touch-action: manipulation;
     }
 
-    /* 上: 高さ・横位置 */
     .top-controls {
       position: fixed;
-      top: calc(env(safe-area-inset-top, 0px) + 10px);
-      left: calc(env(safe-area-inset-left, 0px) + 10px);
-      right: calc(env(safe-area-inset-right, 0px) + 96px);
+      top: calc(env(safe-area-inset-top, 0px) + 12px);
+      left: calc(env(safe-area-inset-left, 0px) + 12px);
+      right: calc(env(safe-area-inset-right, 0px) + 98px);
       z-index: 900;
       display: grid;
-      gap: 5px;
+      gap: 6px;
       color: #fff;
       background: transparent;
-      text-shadow: 0 2px 6px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.95);
+      text-shadow: 0 2px 7px rgba(0,0,0,.95), 0 0 2px rgba(0,0,0,1);
       pointer-events: auto;
     }
-    .top-controls .caption {
+    .caption {
       display: flex;
       justify-content: space-between;
       gap: 8px;
       font-size: 12px;
       font-weight: 900;
-      opacity: .9;
+      opacity: .92;
     }
     .h-control {
       display: grid;
-      grid-template-columns: 56px minmax(90px, 1fr) 46px;
+      grid-template-columns: 56px minmax(100px, 1fr) 44px;
       align-items: center;
       gap: 8px;
       font-size: 12px;
-      font-weight: 800;
+      font-weight: 850;
     }
     .h-control input { width: 100%; }
     .h-control b { text-align: right; font-variant-numeric: tabular-nums; }
 
-    /* 右: 大きさ・回転 */
-    .right-controls {
+    .right-height-control {
       position: fixed;
-      top: calc(env(safe-area-inset-top, 0px) + 96px);
-      right: calc(env(safe-area-inset-right, 0px) + 8px);
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 132px);
+      top: calc(env(safe-area-inset-top, 0px) + 88px);
+      right: calc(env(safe-area-inset-right, 0px) + 10px);
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 138px);
       z-index: 900;
-      width: 86px;
-      display: flex;
-      align-items: stretch;
-      justify-content: center;
-      gap: 8px;
-      color: #fff;
-      text-shadow: 0 2px 6px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.95);
-      pointer-events: auto;
-    }
-    .v-control {
-      min-width: 36px;
+      width: 52px;
       display: grid;
-      grid-template-rows: auto 1fr auto;
       justify-items: center;
       align-items: center;
-      gap: 5px;
+      grid-template-rows: auto 1fr auto;
+      gap: 6px;
+      color: #fff;
       font-size: 12px;
-      font-weight: 850;
+      font-weight: 900;
       background: transparent;
+      pointer-events: auto;
+      text-shadow: 0 2px 7px rgba(0,0,0,.95), 0 0 2px rgba(0,0,0,1);
     }
-    .v-control b { font-variant-numeric: tabular-nums; font-size: 11px; }
-    .v-control input[type="range"] {
-      width: 32px;
-      height: min(46vh, 260px);
+    .right-height-control input[type="range"] {
+      width: 34px;
+      height: min(54vh, 360px);
       writing-mode: vertical-lr;
       direction: rtl;
       -webkit-appearance: slider-vertical;
       appearance: slider-vertical;
       accent-color: #93c5fd;
     }
+    .right-height-control b { font-variant-numeric: tabular-nums; }
 
     input[type="range"] {
       accent-color: #93c5fd;
       touch-action: none;
     }
 
-    /* 下中央: カメラアプリ風録画ボタン */
     .record-dock {
       position: fixed;
       left: 50%;
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
       transform: translateX(-50%);
       z-index: 1100;
       display: grid;
-      justify-items: center;
-      gap: 8px;
+      place-items: center;
+      gap: 6px;
       pointer-events: auto;
       color: #fff;
       text-shadow: 0 2px 6px rgba(0,0,0,.75);
     }
     .record-main {
-      width: 76px;
-      height: 76px;
+      position: relative;
+      width: 78px;
+      height: 78px;
       border-radius: 999px;
-      border: 5px solid rgba(255,255,255,.92);
-      background: rgba(255,255,255,.24);
-      box-shadow: 0 10px 34px rgba(0,0,0,.34);
-      display: grid;
-      place-items: center;
+      border: 5px solid rgba(255,255,255,.96);
+      background: rgba(255,255,255,.22);
+      box-shadow: 0 10px 34px rgba(0,0,0,.35);
       cursor: pointer;
       touch-action: manipulation;
+      padding: 0;
+      display: block;
     }
     .record-main::before {
       content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
       width: 54px;
       height: 54px;
+      transform: translate(-50%, -50%);
       border-radius: 999px;
       background: #ef4444;
-      transition: all 140ms ease;
+      transition: width 140ms ease, height 140ms ease, border-radius 140ms ease, opacity 140ms ease;
       box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
     }
     .record-main.recording::before {
       width: 30px;
       height: 30px;
       border-radius: 7px;
-      background: #ef4444;
       animation: recPulse 900ms ease-in-out infinite alternate;
     }
     @keyframes recPulse { from { opacity:.68; } to { opacity:1; } }
     .record-label {
+      min-height: 16px;
       font-size: 12px;
       font-weight: 900;
-      min-height: 16px;
       letter-spacing: .02em;
     }
+
+    .bottom-control {
+      position: fixed;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 32px);
+      z-index: 1050;
+      width: min(30vw, 150px);
+      min-width: 98px;
+      display: grid;
+      gap: 4px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 900;
+      text-align: center;
+      pointer-events: auto;
+      text-shadow: 0 2px 7px rgba(0,0,0,.95), 0 0 2px rgba(0,0,0,1);
+    }
+    .bottom-control.left {
+      right: calc(50% + 52px);
+    }
+    .bottom-control.right {
+      left: calc(50% + 52px);
+    }
+    .bottom-control input { width: 100%; }
+    .bottom-control b { font-variant-numeric: tabular-nums; }
+
     .save-video {
       display: none;
+      position: fixed;
+      left: 50%;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 104px);
+      transform: translateX(-50%);
+      z-index: 1101;
       padding: 8px 13px;
       border-radius: 999px;
       color: #111;
@@ -235,6 +247,7 @@
       font-size: 13px;
       font-weight: 900;
       box-shadow: 0 8px 24px rgba(0,0,0,.32);
+      pointer-events: auto;
     }
     .save-video.ready { display: inline-flex; }
 
@@ -262,13 +275,7 @@
       box-shadow: 0 20px 70px rgba(0,0,0,.44);
       padding: 18px;
     }
-    .modal-header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 12px;
-    }
+    .modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
     h1 { margin: 0 0 6px; font-size: 20px; }
     p { margin: 6px 0; font-size: 13px; line-height: 1.55; opacity: .9; }
     .close-button {
@@ -284,11 +291,7 @@
       cursor: pointer;
       flex: none;
     }
-    .section {
-      margin-top: 14px;
-      padding-top: 14px;
-      border-top: 1px solid rgba(255,255,255,.12);
-    }
+    .section { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.12); }
     .row { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; }
     button, label.btn, select, .primary-link {
       border: 0;
@@ -311,7 +314,7 @@
       top: calc(env(safe-area-inset-top, 0px) + 64px);
       left: 50%;
       z-index: 1150;
-      max-width: 220px;
+      max-width: 250px;
       padding: 6px 10px;
       border-radius: 999px;
       color: rgba(255,255,255,.92);
@@ -330,33 +333,84 @@
     #recordCanvas { display: none; }
 
     @media (max-width: 520px) {
-      .top-controls { right: calc(env(safe-area-inset-right, 0px) + 92px); }
+      .top-controls { right: calc(env(safe-area-inset-right, 0px) + 88px); }
       .h-control { grid-template-columns: 48px minmax(64px, 1fr) 38px; gap: 6px; }
-      .right-controls { width: 78px; gap: 4px; right: calc(env(safe-area-inset-right, 0px) + 4px); }
-      .v-control input[type="range"] { height: min(42vh, 230px); }
-      .record-main { width: 70px; height: 70px; }
+      .right-height-control { width: 48px; right: calc(env(safe-area-inset-right, 0px) + 5px); }
+      .right-height-control input[type="range"] { height: min(52vh, 320px); }
+      .record-main { width: 72px; height: 72px; }
       .record-main::before { width: 50px; height: 50px; }
+      .bottom-control { width: min(28vw, 120px); min-width: 86px; }
+      .bottom-control.left { right: calc(50% + 46px); }
+      .bottom-control.right { left: calc(50% + 46px); }
     }
   </style>
+  <script>
+    AFRAME.registerComponent('keep-last-marker-pose', {
+      schema: {
+        marker: { type: 'selector' },
+        anchor: { type: 'selector' }
+      },
+      init: function () {
+        this.hasPose = false;
+        this.position = new THREE.Vector3();
+        this.quaternion = new THREE.Quaternion();
+        window.addEventListener('reset-ar-pose', () => {
+          this.hasPose = false;
+          if (this.data.anchor && this.data.anchor.object3D) {
+            this.data.anchor.object3D.visible = false;
+          }
+        });
+      },
+      tick: function () {
+        const markerEl = this.data.marker;
+        const anchorEl = this.data.anchor;
+        if (!markerEl || !anchorEl || !markerEl.object3D || !anchorEl.object3D) return;
+
+        if (markerEl.object3D.visible) {
+          markerEl.object3D.updateMatrixWorld(true);
+          markerEl.object3D.matrixWorld.decompose(this.position, this.quaternion, new THREE.Vector3());
+          anchorEl.object3D.position.copy(this.position);
+          anchorEl.object3D.quaternion.copy(this.quaternion);
+          anchorEl.object3D.scale.set(1, 1, 1);
+          anchorEl.object3D.visible = true;
+          this.hasPose = true;
+        } else if (this.hasPose) {
+          anchorEl.object3D.visible = true;
+        } else {
+          anchorEl.object3D.visible = false;
+        }
+      }
+    });
+  </script>
 </head>
 <body>
-  <canvas id="artCanvas"></canvas>
-
   <div class="top-controls" aria-label="上部AR調整">
-    <div class="caption"><span>AR調整</span><span>高さ / 横位置</span></div>
-    <label class="h-control">高さ <input id="height" type="range" min="-120" max="520" step="1" value="120"><b id="heightVal">120</b></label>
-    <label class="h-control">横位置 <input id="offsetX" type="range" min="-320" max="320" step="1" value="0"><b id="offsetXVal">0</b></label>
+    <div class="caption"><span>横位置</span><span>Hiroに追従</span></div>
+    <label class="h-control">横位置 <input id="offsetX" type="range" min="-4" max="4" step="0.05" value="0"><b id="offsetXVal">0.00</b></label>
   </div>
 
-  <div class="right-controls" aria-label="右側AR調整">
-    <label class="v-control"><span>大きさ</span><input id="size" type="range" min="0.25" max="3.5" step="0.01" value="1.0"><b id="sizeVal">1.00</b></label>
-    <label class="v-control"><span>回転</span><input id="rotation" type="range" min="-180" max="180" step="1" value="0"><b id="rotationVal">0°</b></label>
-  </div>
+  <label class="right-height-control" aria-label="高さ調整">
+    <span>高さ</span>
+    <input id="height" type="range" min="0" max="6" step="0.05" value="1.0">
+    <b id="heightVal">1.00</b>
+  </label>
 
   <button class="menu-button" id="openMenu" type="button" aria-haspopup="dialog" aria-controls="menuModal">menu</button>
 
+  <label class="bottom-control left" aria-label="回転調整">
+    <span>回転</span>
+    <input id="rotation" type="range" min="-180" max="180" step="1" value="0">
+    <b id="rotationVal">0°</b>
+  </label>
+
+  <label class="bottom-control right" aria-label="大きさ調整">
+    <span>大きさ</span>
+    <input id="size" type="range" min="0.2" max="4" step="0.01" value="1.2">
+    <b id="sizeVal">1.20</b>
+  </label>
+
+  <a id="downloadVideo" class="save-video" href="#" download="ar-drawing.mp4">動画を保存</a>
   <div class="record-dock" aria-label="録画操作">
-    <a id="downloadVideo" class="save-video" href="#" download="ar-drawing.webm">動画を保存</a>
     <button id="recordToggle" class="record-main" type="button" aria-label="録画開始"></button>
     <div id="recordStatus" class="record-label">タップで録画</div>
   </div>
@@ -366,7 +420,7 @@
       <div class="modal-header">
         <div>
           <h1 id="menuTitle">動くお絵かきAR</h1>
-          <p>AR.jsのカメラ映像を画面いっぱいに表示し、その上に絵を透明canvasで合成します。録画は画面と同じ構成で、カメラ映像と絵だけを書き出します。</p>
+          <p>絵はHiroマーカーに追従する3D ARオブジェクトです。録画はAR.jsのカメラ映像とARオブジェクトだけを合成して保存します。</p>
         </div>
         <button class="close-button" id="closeMenu" type="button" aria-label="閉じる">×</button>
       </div>
@@ -400,7 +454,7 @@
           <a class="primary-link" href="hiro-marker-print.html" target="_blank" rel="noopener">Hiroを印刷</a>
           <button class="ghost-button" id="resetPose" type="button">表示位置をリセット</button>
         </div>
-        <p class="small">録画ボタンは下部中央です。menu・スライダー・トースト・録画ボタンは録画には入りません。</p>
+        <p class="small">録画終了後は自動で保存を開始します。MP4非対応のブラウザではWebMで保存します。</p>
       </div>
     </section>
   </div>
@@ -410,11 +464,29 @@
 
   <a-scene
     embedded
+    keep-last-marker-pose="marker:#hiroMarker; anchor:#lastAnchor"
     vr-mode-ui="enabled:false"
     renderer="alpha:true; antialias:true; logarithmicDepthBuffer:true"
     arjs="sourceType:webcam; trackingMethod:best; debugUIEnabled:false;"
   >
-    <a-marker id="hiroMarker" preset="hiro" smooth="true" smoothCount="7" smoothTolerance="0.01" smoothThreshold="5"></a-marker>
+    <a-marker id="hiroMarker" preset="hiro" smooth="true" smoothCount="8" smoothTolerance="0.01" smoothThreshold="5"></a-marker>
+
+    <a-entity id="lastAnchor" visible="false">
+      <a-entity id="artworkPlacement" position="0 1.0 0" rotation="0 0 0">
+        <a-entity id="motionGroup" position="0 0 0" rotation="0 0 0">
+          <a-entity id="artworkSizer" scale="1.2 1.2 1.2">
+            <a-plane
+              id="drawing"
+              width="1"
+              height="1"
+              material="transparent:true; side:double; alphaTest:0.03"
+              rotation="0 0 0"
+            ></a-plane>
+          </a-entity>
+        </a-entity>
+      </a-entity>
+    </a-entity>
+
     <a-entity id="arCamera" camera></a-entity>
   </a-scene>
 
@@ -455,12 +527,11 @@ const jellyfishSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height
   </g>
 </svg>`;
 
-const artCanvas = document.getElementById('artCanvas');
-const artCtx = artCanvas.getContext('2d');
-const recordCanvas = document.getElementById('recordCanvas');
-const recordCtx = recordCanvas.getContext('2d');
-const markerEl = document.getElementById('hiroMarker');
 const sceneEl = document.querySelector('a-scene');
+const drawing = document.getElementById('drawing');
+const artworkPlacement = document.getElementById('artworkPlacement');
+const motionGroup = document.getElementById('motionGroup');
+const artworkSizer = document.getElementById('artworkSizer');
 const preset = document.getElementById('preset');
 const motion = document.getElementById('motion');
 const height = document.getElementById('height');
@@ -480,97 +551,19 @@ const toastEl = document.getElementById('toast');
 const recordToggle = document.getElementById('recordToggle');
 const downloadVideo = document.getElementById('downloadVideo');
 const recordStatus = document.getElementById('recordStatus');
+const recordCanvas = document.getElementById('recordCanvas');
+const recordCtx = recordCanvas.getContext('2d');
 
 const state = {
-  hasPose: false,
-  markerVisible: false,
-  x: window.innerWidth / 2,
-  y: window.innerHeight / 2,
-  lastToastAt: 0,
-  image: null,
-  imageRatio: 1,
-  baseHeight: 170,
   recorder: null,
   chunks: [],
   recording: false,
   videoUrl: null,
+  audioContext: null,
+  audioDestination: null,
+  micStream: null,
+  lastToastAt: 0,
 };
-
-const tmpWorld = new THREE.Vector3();
-
-function setImportantStyle(el, prop, value) {
-  if (el && el.style) el.style.setProperty(prop, value, 'important');
-}
-
-function forceFullscreenAr() {
-  document.documentElement.style.setProperty('overflow', 'hidden', 'important');
-  document.body.style.setProperty('overflow', 'hidden', 'important');
-
-  document.querySelectorAll('video, #arjs-video, .arjs-video').forEach(video => {
-    setImportantStyle(video, 'position', 'fixed');
-    setImportantStyle(video, 'top', '0');
-    setImportantStyle(video, 'left', '0');
-    setImportantStyle(video, 'right', '0');
-    setImportantStyle(video, 'bottom', '0');
-    setImportantStyle(video, 'width', '100vw');
-    setImportantStyle(video, 'height', '100vh');
-    setImportantStyle(video, 'min-width', '100vw');
-    setImportantStyle(video, 'min-height', '100vh');
-    setImportantStyle(video, 'max-width', 'none');
-    setImportantStyle(video, 'max-height', 'none');
-    setImportantStyle(video, 'object-fit', 'cover');
-    setImportantStyle(video, 'margin', '0');
-    setImportantStyle(video, 'padding', '0');
-    setImportantStyle(video, 'transform', 'none');
-    setImportantStyle(video, 'z-index', '0');
-    setImportantStyle(video, 'display', 'block');
-    setImportantStyle(video, 'visibility', 'visible');
-    setImportantStyle(video, 'opacity', '1');
-    video.setAttribute('playsinline', '');
-    video.muted = true;
-  });
-
-  document.querySelectorAll('a-scene canvas, canvas.a-canvas').forEach(canvas => {
-    setImportantStyle(canvas, 'position', 'fixed');
-    setImportantStyle(canvas, 'inset', '0');
-    setImportantStyle(canvas, 'width', '100vw');
-    setImportantStyle(canvas, 'height', '100vh');
-    setImportantStyle(canvas, 'background', 'transparent');
-    setImportantStyle(canvas, 'opacity', '0');
-    setImportantStyle(canvas, 'pointer-events', 'none');
-  });
-
-  if (sceneEl && sceneEl.renderer) {
-    try {
-      sceneEl.renderer.setClearColor(0x000000, 0);
-      sceneEl.renderer.setClearAlpha(0);
-    } catch (error) {}
-  }
-}
-
-function findArVideo() {
-  const videos = Array.from(document.querySelectorAll('video'));
-  return videos.find(v => (v.srcObject || v.videoWidth || v.id === 'arjs-video' || v.classList.contains('arjs-video'))) || null;
-}
-
-function values() {
-  return {
-    h: Number(height.value),
-    x: Number(offsetX.value),
-    s: Number(size.value),
-    r: Number(rotation.value),
-    motion: motion.value,
-  };
-}
-
-function updateLabels() {
-  const v = values();
-  heightVal.textContent = Math.round(v.h);
-  offsetXVal.textContent = Math.round(v.x);
-  sizeVal.textContent = v.s.toFixed(2);
-  rotationVal.textContent = `${Math.round(v.r)}°`;
-}
-[height, offsetX, size, rotation].forEach(input => input.addEventListener('input', updateLabels));
 
 function openModal() { modal.classList.add('open'); }
 function closeModal() { modal.classList.remove('open'); }
@@ -581,12 +574,12 @@ window.addEventListener('keydown', event => { if (event.key === 'Escape') closeM
 
 function showToast(message) {
   const now = performance.now();
-  if (now - state.lastToastAt < 1600) return;
+  if (now - state.lastToastAt < 1300) return;
   state.lastToastAt = now;
   toastEl.textContent = message;
   toastEl.classList.add('show');
   window.clearTimeout(showToast.timer);
-  showToast.timer = window.setTimeout(() => toastEl.classList.remove('show'), 750);
+  showToast.timer = window.setTimeout(() => toastEl.classList.remove('show'), 700);
 }
 
 function svgToDataUri(svg) {
@@ -604,16 +597,76 @@ function loadImage(src) {
 
 async function setArtwork(src) {
   const img = await loadImage(src);
-  state.image = img;
   const w = img.naturalWidth || img.width || 1;
   const h = img.naturalHeight || img.height || 1;
-  state.imageRatio = Math.max(0.01, w / h);
+  const ratio = Math.max(0.01, w / h);
+  drawing.setAttribute('width', String(ratio));
+  drawing.setAttribute('height', '1');
+  drawing.setAttribute('geometry', `primitive: plane; width: ${ratio}; height: 1`);
+  drawing.setAttribute('material', {
+    src,
+    transparent: true,
+    side: 'double',
+    alphaTest: 0.03
+  });
+  applyMotion(motion.value);
 }
 
 async function setPreset(name) {
   await setArtwork(svgToDataUri(name === 'jellyfish' ? jellyfishSvg : fishSvg));
 }
 
+function values() {
+  return {
+    h: Number(height.value),
+    x: Number(offsetX.value),
+    s: Number(size.value),
+    r: Number(rotation.value),
+  };
+}
+
+function updateLabels() {
+  const v = values();
+  heightVal.textContent = v.h.toFixed(2);
+  offsetXVal.textContent = v.x.toFixed(2);
+  sizeVal.textContent = v.s.toFixed(2);
+  rotationVal.textContent = `${Math.round(v.r)}°`;
+}
+
+function clearAnimations() {
+  motionGroup.removeAttribute('animation__float');
+  motionGroup.removeAttribute('animation__swim');
+  motionGroup.removeAttribute('animation__spin');
+  motionGroup.removeAttribute('animation__jump');
+}
+
+function setBaseTransform() {
+  const v = values();
+  updateLabels();
+  artworkPlacement.setAttribute('position', `${v.x.toFixed(2)} ${v.h.toFixed(2)} 0`);
+  artworkPlacement.setAttribute('rotation', `0 ${v.r.toFixed(1)} 0`);
+  artworkSizer.setAttribute('scale', `${v.s.toFixed(3)} ${v.s.toFixed(3)} ${v.s.toFixed(3)}`);
+  motionGroup.setAttribute('position', '0 0 0');
+  motionGroup.setAttribute('rotation', '0 0 0');
+}
+
+function applyMotion(type) {
+  clearAnimations();
+  setBaseTransform();
+  if (type === 'still') return;
+  if (type === 'float') {
+    motionGroup.setAttribute('animation__float', 'property: position; from: 0 0 0; to: 0 0.45 0; dir: alternate; dur: 1100; easing: easeInOutSine; loop: true');
+  } else if (type === 'swim') {
+    motionGroup.setAttribute('animation__swim', 'property: position; from: -0.35 0 0; to: 0.35 0 0; dir: alternate; dur: 1300; easing: easeInOutSine; loop: true');
+  } else if (type === 'spin') {
+    motionGroup.setAttribute('animation__spin', 'property: rotation; from: 0 0 0; to: 0 360 0; dur: 1800; easing: linear; loop: true');
+  } else if (type === 'jump') {
+    motionGroup.setAttribute('animation__jump', 'property: position; from: 0 0 0; to: 0 0.85 0; dir: alternate; dur: 520; easing: easeOutQuad; loop: true');
+  }
+}
+
+[height, offsetX, size, rotation].forEach(input => input.addEventListener('input', () => applyMotion(motion.value)));
+motion.addEventListener('change', event => applyMotion(event.target.value));
 preset.addEventListener('change', event => setPreset(event.target.value));
 fileInput.addEventListener('change', event => {
   const file = event.target.files && event.target.files[0];
@@ -629,108 +682,70 @@ fileInput.addEventListener('change', event => {
   };
   reader.readAsDataURL(file);
 });
-
 resetPose.addEventListener('click', () => {
-  state.hasPose = false;
-  state.markerVisible = false;
-  state.x = window.innerWidth / 2;
-  state.y = window.innerHeight / 2;
+  window.dispatchEvent(new Event('reset-ar-pose'));
   showToast('位置リセット');
   closeModal();
 });
 
-function resizeCanvases() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+function setImportantStyle(el, prop, value) {
+  if (el && el.style) el.style.setProperty(prop, value, 'important');
+}
+
+function forceFullscreenAr() {
+  document.documentElement.style.setProperty('overflow', 'hidden', 'important');
+  document.body.style.setProperty('overflow', 'hidden', 'important');
+
+  document.querySelectorAll('video, #arjs-video, .arjs-video').forEach(video => {
+    setImportantStyle(video, 'position', 'fixed');
+    setImportantStyle(video, 'top', '0');
+    setImportantStyle(video, 'left', '0');
+    setImportantStyle(video, 'width', '100vw');
+    setImportantStyle(video, 'height', '100vh');
+    setImportantStyle(video, 'object-fit', 'cover');
+    setImportantStyle(video, 'z-index', '0');
+    setImportantStyle(video, 'display', 'block');
+    setImportantStyle(video, 'visibility', 'visible');
+    setImportantStyle(video, 'opacity', '1');
+    video.setAttribute('playsinline', '');
+    video.muted = true;
+  });
+
+  document.querySelectorAll('a-scene canvas, canvas.a-canvas').forEach(canvas => {
+    setImportantStyle(canvas, 'position', 'fixed');
+    setImportantStyle(canvas, 'inset', '0');
+    setImportantStyle(canvas, 'width', '100vw');
+    setImportantStyle(canvas, 'height', '100vh');
+    setImportantStyle(canvas, 'background', 'transparent');
+    setImportantStyle(canvas, 'opacity', '1');
+    setImportantStyle(canvas, 'pointer-events', 'none');
+    setImportantStyle(canvas, 'z-index', '10');
+  });
+
+  if (sceneEl && sceneEl.renderer) {
+    try {
+      sceneEl.renderer.setClearColor(0x000000, 0);
+      sceneEl.renderer.setClearAlpha(0);
+    } catch (error) {}
+  }
+}
+
+function findArVideo() {
+  const videos = Array.from(document.querySelectorAll('video'));
+  return videos.find(v => (v.srcObject || v.videoWidth || v.id === 'arjs-video' || v.classList.contains('arjs-video'))) || null;
+}
+
+function findSceneCanvas() {
+  return document.querySelector('a-scene canvas') || document.querySelector('canvas.a-canvas');
+}
+
+function resizeRecordCanvas() {
   const w = Math.max(1, window.innerWidth);
   const h = Math.max(1, window.innerHeight);
-  const bw = Math.round(w * dpr);
-  const bh = Math.round(h * dpr);
-
-  if (artCanvas.width !== bw || artCanvas.height !== bh) {
-    artCanvas.width = bw;
-    artCanvas.height = bh;
-    artCanvas.style.width = w + 'px';
-    artCanvas.style.height = h + 'px';
-  }
   if (recordCanvas.width !== w || recordCanvas.height !== h) {
     recordCanvas.width = w;
     recordCanvas.height = h;
   }
-  state.baseHeight = Math.max(110, Math.min(w, h) * 0.24);
-}
-
-function updateMarkerPosition() {
-  const camera = sceneEl.camera;
-  if (!camera || !markerEl.object3D) return;
-
-  const visible = !!markerEl.object3D.visible;
-  if (visible) {
-    markerEl.object3D.updateMatrixWorld(true);
-    markerEl.object3D.getWorldPosition(tmpWorld);
-    tmpWorld.project(camera);
-    const sx = (tmpWorld.x * 0.5 + 0.5) * window.innerWidth;
-    const sy = (-tmpWorld.y * 0.5 + 0.5) * window.innerHeight;
-    if (Number.isFinite(sx) && Number.isFinite(sy)) {
-      if (!state.hasPose) {
-        state.x = sx;
-        state.y = sy;
-        state.hasPose = true;
-      } else {
-        state.x += (sx - state.x) * 0.28;
-        state.y += (sy - state.y) * 0.28;
-      }
-    }
-  }
-
-  if (visible !== state.markerVisible) {
-    state.markerVisible = visible;
-    showToast(visible ? 'Hiro認識' : 'Hiro保持');
-  }
-}
-
-function motionOffset(now, type) {
-  const t = now / 1000;
-  if (type === 'float') return { x: 0, y: Math.sin(t * 2.8) * 18, rotation: Math.sin(t * 1.7) * 4 };
-  if (type === 'swim') return { x: Math.sin(t * 3.2) * 34, y: Math.sin(t * 2.0) * 7, rotation: Math.sin(t * 3.2) * 6 };
-  if (type === 'spin') return { x: 0, y: 0, rotation: (t * 120) % 360 };
-  if (type === 'jump') return { x: 0, y: -Math.abs(Math.sin(t * 4.0)) * 42, rotation: 0 };
-  return { x: 0, y: 0, rotation: 0 };
-}
-
-function computeArtRect(now = performance.now()) {
-  const v = values();
-  const m = motionOffset(now, v.motion);
-  const h = state.baseHeight * v.s;
-  const w = h * state.imageRatio;
-  return {
-    visible: !!(state.image && state.hasPose),
-    cx: state.x + v.x + m.x,
-    cy: state.y - v.h + m.y,
-    w,
-    h,
-    rotation: (v.r + m.rotation) * Math.PI / 180,
-  };
-}
-
-function drawArt(ctx, rect) {
-  if (!rect.visible || !state.image) return;
-  ctx.save();
-  ctx.translate(rect.cx, rect.cy);
-  ctx.rotate(rect.rotation);
-  ctx.drawImage(state.image, -rect.w / 2, -rect.h / 2, rect.w, rect.h);
-  ctx.restore();
-}
-
-function drawOverlay(now) {
-  resizeCanvases();
-  forceFullscreenAr();
-  updateMarkerPosition();
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  const dpr = artCanvas.width / w;
-  artCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  artCtx.clearRect(0, 0, w, h);
-  drawArt(artCtx, computeArtRect(now));
 }
 
 function drawVideoCover(ctx, video, w, h) {
@@ -739,7 +754,10 @@ function drawVideoCover(ctx, video, w, h) {
   if (!video || !video.videoWidth || !video.videoHeight) return;
   const vr = video.videoWidth / video.videoHeight;
   const cr = w / h;
-  let sw = video.videoWidth, sh = video.videoHeight, sx = 0, sy = 0;
+  let sw = video.videoWidth;
+  let sh = video.videoHeight;
+  let sx = 0;
+  let sy = 0;
   if (vr > cr) {
     sw = video.videoHeight * cr;
     sx = (video.videoWidth - sw) / 2;
@@ -750,26 +768,36 @@ function drawVideoCover(ctx, video, w, h) {
   ctx.drawImage(video, sx, sy, sw, sh, 0, 0, w, h);
 }
 
-function drawRecordFrame(now) {
+function drawRecordFrame() {
+  resizeRecordCanvas();
   const w = recordCanvas.width;
   const h = recordCanvas.height;
   recordCtx.setTransform(1, 0, 0, 1, 0, 0);
   drawVideoCover(recordCtx, findArVideo(), w, h);
-  drawArt(recordCtx, computeArtRect(now));
+  const sceneCanvas = findSceneCanvas();
+  if (sceneCanvas) {
+    try {
+      recordCtx.drawImage(sceneCanvas, 0, 0, w, h);
+    } catch (error) {}
+  }
 }
 
-function loop(now) {
-  drawOverlay(now);
-  if (state.recording) drawRecordFrame(now);
+function loop() {
+  forceFullscreenAr();
+  if (state.recording) drawRecordFrame();
   requestAnimationFrame(loop);
 }
 
 function supportedMimeType() {
   const options = [
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    'video/mp4;codecs=h264,aac',
+    'video/mp4',
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
     'video/webm;codecs=vp9',
     'video/webm;codecs=vp8',
-    'video/webm',
-    'video/mp4'
+    'video/webm'
   ];
   return options.find(type => window.MediaRecorder && MediaRecorder.isTypeSupported(type)) || '';
 }
@@ -783,7 +811,7 @@ function setRecordState(mode) {
   } else if (mode === 'ready') {
     recordToggle.classList.remove('recording');
     recordToggle.setAttribute('aria-label', '録画開始');
-    recordStatus.textContent = '保存できます';
+    recordStatus.textContent = '保存しました';
     downloadVideo.classList.add('ready');
   } else {
     recordToggle.classList.remove('recording');
@@ -793,7 +821,88 @@ function setRecordState(mode) {
   }
 }
 
-function startRecording() {
+async function setupAudioMixer(recordingStream) {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  const ctx = new AudioContextClass();
+  await ctx.resume();
+  const dest = ctx.createMediaStreamDestination();
+  state.audioContext = ctx;
+  state.audioDestination = dest;
+  dest.stream.getAudioTracks().forEach(track => recordingStream.addTrack(track));
+
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    try {
+      state.micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: true
+        },
+        video: false
+      });
+      const micSource = ctx.createMediaStreamSource(state.micStream);
+      micSource.connect(dest);
+      showToast('音声あり');
+    } catch (error) {
+      showToast('マイクなしで録画');
+    }
+  }
+}
+
+function playShutterSound() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  const ctx = state.audioContext || new AudioContextClass();
+  if (!state.audioContext) state.audioContext = ctx;
+  ctx.resume();
+
+  const now = ctx.currentTime;
+  const osc1 = ctx.createOscillator();
+  const osc2 = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc1.type = 'square';
+  osc2.type = 'triangle';
+  osc1.frequency.setValueAtTime(880, now);
+  osc1.frequency.exponentialRampToValueAtTime(260, now + 0.08);
+  osc2.frequency.setValueAtTime(1320, now + 0.03);
+  osc2.frequency.exponentialRampToValueAtTime(420, now + 0.12);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.22, now + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+  osc1.connect(gain);
+  osc2.connect(gain);
+  gain.connect(ctx.destination);
+  if (state.audioDestination) gain.connect(state.audioDestination);
+  osc1.start(now);
+  osc2.start(now + 0.03);
+  osc1.stop(now + 0.18);
+  osc2.stop(now + 0.18);
+}
+
+function cleanupAudio() {
+  if (state.micStream) {
+    state.micStream.getTracks().forEach(track => track.stop());
+    state.micStream = null;
+  }
+  if (state.audioContext) {
+    state.audioContext.close().catch(() => {});
+    state.audioContext = null;
+    state.audioDestination = null;
+  }
+}
+
+function autoDownload(url, filename) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => a.remove(), 0);
+}
+
+async function startRecording() {
   if (!window.MediaRecorder || !recordCanvas.captureStream) {
     alert('このブラウザでは録画に対応していません。Android Chrome / Edge で試してください。');
     return;
@@ -810,15 +919,19 @@ function startRecording() {
   downloadVideo.href = '#';
   downloadVideo.classList.remove('ready');
   state.chunks = [];
-  resizeCanvases();
-  drawRecordFrame(performance.now());
+  resizeRecordCanvas();
+  drawRecordFrame();
 
-  const stream = recordCanvas.captureStream(30);
+  const canvasStream = recordCanvas.captureStream(30);
+  const recordingStream = new MediaStream(canvasStream.getVideoTracks());
+  await setupAudioMixer(recordingStream);
+
   const mimeType = supportedMimeType();
   const options = mimeType ? { mimeType } : undefined;
   try {
-    state.recorder = new MediaRecorder(stream, options);
+    state.recorder = new MediaRecorder(recordingStream, options);
   } catch (error) {
+    cleanupAudio();
     alert('録画を開始できませんでした。別のブラウザで試してください。');
     return;
   }
@@ -827,16 +940,24 @@ function startRecording() {
   };
   state.recorder.onstop = () => {
     const type = state.chunks[0]?.type || mimeType || 'video/webm';
+    const isMp4 = type.includes('mp4');
+    const ext = isMp4 ? 'mp4' : 'webm';
+    const filename = `ar-drawing-${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`;
     const blob = new Blob(state.chunks, { type });
     state.videoUrl = URL.createObjectURL(blob);
     downloadVideo.href = state.videoUrl;
-    downloadVideo.download = type.includes('mp4') ? 'ar-drawing.mp4' : 'ar-drawing.webm';
+    downloadVideo.download = filename;
     state.recording = false;
+    cleanupAudio();
     setRecordState('ready');
+    autoDownload(state.videoUrl, filename);
+    if (!isMp4) showToast('MP4非対応のためWebM保存');
   };
+
   state.recording = true;
   state.recorder.start(200);
   setRecordState('recording');
+  playShutterSound();
 }
 
 function stopRecording() {
@@ -851,12 +972,12 @@ recordToggle.addEventListener('click', () => {
   else startRecording();
 });
 
-window.addEventListener('resize', resizeCanvases);
-window.addEventListener('orientationchange', () => setTimeout(resizeCanvases, 250));
+window.addEventListener('resize', resizeRecordCanvas);
+window.addEventListener('orientationchange', () => setTimeout(resizeRecordCanvas, 250));
 sceneEl.addEventListener('loaded', forceFullscreenAr);
 sceneEl.addEventListener('renderstart', forceFullscreenAr);
 new MutationObserver(forceFullscreenAr).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
-window.setInterval(forceFullscreenAr, 250);
+window.setInterval(forceFullscreenAr, 500);
 
 updateLabels();
 setPreset('fish');
