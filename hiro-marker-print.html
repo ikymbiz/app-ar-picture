@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Hiroマーカー印刷</title>
+  <title>ARマーカー印刷</title>
   <style>
     @page { size: A4 portrait; margin: 0; }
     * { box-sizing: border-box; }
@@ -42,9 +42,12 @@
       left: 16px;
       top: 16px;
       display: flex;
+      flex-wrap: wrap;
       gap: 8px;
+      align-items: center;
+      z-index: 2;
     }
-    button, a {
+    button, a, select {
       border: 0;
       border-radius: 999px;
       background: #111827;
@@ -54,6 +57,30 @@
       text-decoration: none;
       cursor: pointer;
     }
+    select {
+      padding-right: 32px;
+      background: #fff;
+      color: #111827;
+      border: 1px solid #d1d5db;
+    }
+    .label {
+      font-size: 13px;
+      font-weight: 850;
+      color: #111827;
+      background: rgba(255,255,255,.92);
+      padding: 8px 10px;
+      border-radius: 999px;
+    }
+    .title {
+      position: absolute;
+      top: 30mm;
+      left: 20mm;
+      right: 20mm;
+      text-align: center;
+      font-size: 22px;
+      font-weight: 900;
+      color: #111827;
+    }
     .note {
       position: absolute;
       bottom: 22mm;
@@ -61,6 +88,7 @@
       right: 20mm;
       text-align: center;
       font-size: 12px;
+      line-height: 1.6;
       color: #4b5563;
     }
     @media print {
@@ -72,14 +100,71 @@
 </head>
 <body>
   <div class="controls">
+    <span class="label">印刷するマーカー</span>
+    <select id="markerSelect" title="マーカー">
+      <option value="hiro">Hiro</option>
+      <option value="dd-learn">dd-learn</option>
+    </select>
     <button onclick="window.print()">印刷する</button>
     <a href="index.html">ARに戻る</a>
   </div>
+
   <main class="sheet">
+    <div class="title" id="markerTitle">Hiroマーカー</div>
     <div class="marker">
-      <img src="https://raw.githubusercontent.com/AR-js-org/AR.js/master/data/images/hiro.png" alt="Hiro marker">
+      <img id="markerImage" alt="AR marker">
     </div>
-    <div class="note">A4面積の約1/8サイズです。印刷設定は「実際のサイズ」または「100%」にしてください。</div>
+    <div class="note" id="markerNote">A4面積の約1/8サイズです。印刷設定は「実際のサイズ」または「100%」にしてください。</div>
   </main>
+
+<script>
+const MARKER_STORAGE_KEY = 'ar-drawing-marker';
+const MARKERS = {
+  hiro: {
+    label: 'Hiro',
+    title: 'Hiroマーカー',
+    image: 'https://raw.githubusercontent.com/AR-js-org/AR.js/master/data/images/hiro.png',
+    note: 'A4面積の約1/8サイズです。印刷設定は「実際のサイズ」または「100%」にしてください。'
+  },
+  'dd-learn': {
+    label: 'dd-learn',
+    title: 'dd-learnマーカー',
+    image: 'dd-learn-marker.svg',
+    note: 'このマーカーを使う場合は、AR本体の設定画面でも「dd-learn」を選んでください。dd-learn-marker.pattをindex.htmlと同じ場所に置いてください。印刷設定は「実際のサイズ」または「100%」にしてください。'
+  }
+};
+
+const select = document.getElementById('markerSelect');
+const image = document.getElementById('markerImage');
+const title = document.getElementById('markerTitle');
+const note = document.getElementById('markerNote');
+
+function normalizeMarker(value) {
+  return Object.prototype.hasOwnProperty.call(MARKERS, value) ? value : 'hiro';
+}
+
+function initialMarker() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return normalizeMarker(params.get('marker') || localStorage.getItem(MARKER_STORAGE_KEY));
+  } catch (_) {
+    return 'hiro';
+  }
+}
+
+function setMarker(value) {
+  const marker = normalizeMarker(value);
+  const config = MARKERS[marker];
+  select.value = marker;
+  image.src = config.image;
+  image.alt = `${config.label} marker`;
+  title.textContent = config.title;
+  note.textContent = config.note;
+  try { localStorage.setItem(MARKER_STORAGE_KEY, marker); } catch (_) {}
+}
+
+select.addEventListener('change', event => setMarker(event.target.value));
+setMarker(initialMarker());
+</script>
 </body>
 </html>
