@@ -502,7 +502,7 @@
           <button class="danger" id="resetAll" type="button">全部リセット</button>
         </div>
         <p class="small">録画は下部中央のボタンで開始・停止します。録画中も、回転・高さ・大きさ・位置の調整を続けられます。停止後、自動で保存されます。録画にUIは入りません。</p>
-        <p class="small">MP4対応ブラウザではMP4、非対応時はWebMで保存します。マイク許可を出すと音声も入ります。</p>
+        <p class="small">Androidで見やすいMP4保存を優先します。直接MP4録画できない場合は、内部録画をMP4へ変換して保存します。マイク許可を出すと音声も入ります。</p>
       </div>
     </section>
   </div>
@@ -591,8 +591,13 @@ const state = {
   micStream: null,
   recordLoop: 0,
   recordMime: '',
-  recordExt: 'webm',
+  recordExt: 'mp4',
+  rawRecordExt: 'mp4',
+  needsMp4Convert: false,
+  ffmpegInstance: null,
+  ffmpegLoading: null,
   stopRequested: false,
+  unexpectedRestartCount: 0,
   recordStartAt: 0,
   lastToastAt: 0,
   motion: 'float'
@@ -1128,16 +1133,111 @@ function drawContainOverlay(ctx, source, canvasWidth, canvasHeight) {
 }
 
 function pickRecordingMime() {
-  const types = [
+  // Androidで見やすいよう、保存ファイルはMP4を最優先にします。
+  // 直接MP4録画できないブラウザでは、内部的にWebMで録画してからMP4へ変換します。
+  const mp4Types = [
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
     'video/mp4;codecs=h264,aac',
-    'video/mp4',
-    'video/webm;codecs=vp9,opus',
+    'video/mp4'
+  ];
+  const webmTypes = [
     'video/webm;codecs=vp8,opus',
+    'video/webm;codecs=vp9,opus',
     'video/webm'
   ];
-  const supported = types.find(type => window.MediaRecorder && MediaRecorder.isTypeSupported(type));
-  state.recordMime = supported || '';
-  state.recordExt = supported && supported.includes('mp4') ? 'mp4' : 'webm';
+
+  const directMp4 = mp4Types.find(type => window.MediaRecorder && MediaRecorder.isTypeSupported(type));
+  if (directMp4) {
+    state.recordMime = directMp4;
+    state.rawRecordExt = 'mp4';
+    state.recordExt = 'mp4';
+    state.needsMp4Convert = false;
+    return;
+  }
+
+  const internalWebm = webmTypes.find(type => window.MediaRecorder && MediaRecorder.isTypeSupported(type));
+  state.recordMime = internalWebm || '';
+  state.rawRecordExt = internalWebm ? 'webm' : 'mp4';
+  state.recordExt = 'mp4';
+  state.needsMp4Convert = !!internalWebm;
+}
+
+function loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    const existing = Array.from(document.scripts).find(script => script.src === src);
+    if (existing) {
+      if (existing.dataset.loaded === 'true') resolve();
+      else {
+        existing.addEventListener('load', resolve, { once: true });
+        existing.addEventListener('error', reject, { once: true });
+      }
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = () => {
+      script.dataset.loaded = 'true';
+      resolve();
+    };
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+async function getFfmpeg() {
+  if (state.ffmpegInstance) return state.ffmpegInstance;
+  if (state.ffmpegLoading) return state.ffmpegLoading;
+
+  state.ffmpegLoading = (async () => {
+    await loadScriptOnce('https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js');
+    const { createFFmpeg } = window.FFmpeg || {};
+    if (!createFFmpeg) throw new Error('ffmpeg.wasm を読み込めませんでした');
+
+    const ffmpeg = createFFmpeg({
+      log: false,
+      corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+    });
+    await ffmpeg.load();
+    state.ffmpegInstance = ffmpeg;
+    return ffmpeg;
+  })();
+
+  return state.ffmpegLoading;
+}
+
+function blobToUint8Array(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result));
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(blob);
+  });
+}
+
+async function convertWebmBlobToMp4(webmBlob) {
+  elements.recordLabel.textContent = 'MP4変換中';
+  showToast('MP4に変換中');
+  const ffmpeg = await getFfmpeg();
+  const stamp = Date.now();
+  const input = `input-${stamp}.webm`;
+  const output = `output-${stamp}.mp4`;
+  const inputData = await blobToUint8Array(webmBlob);
+
+  ffmpeg.FS('writeFile', input, inputData);
+  try {
+    // まず互換性重視のMP4変換を試します。
+    await ffmpeg.run('-i', input, '-movflags', 'faststart', '-pix_fmt', 'yuv420p', output);
+  } catch (error) {
+    // 端末によって上のオプションが失敗する場合があるため、最小指定でもう一度試します。
+    try { await ffmpeg.run('-i', input, output); }
+    catch (secondError) { throw secondError; }
+  }
+
+  const mp4Data = ffmpeg.FS('readFile', output);
+  try { ffmpeg.FS('unlink', input); } catch (_) {}
+  try { ffmpeg.FS('unlink', output); } catch (_) {}
+  return new Blob([mp4Data.buffer], { type: 'video/mp4' });
 }
 
 async function startRecording() {
@@ -1152,6 +1252,7 @@ async function startRecording() {
 
   pickRecordingMime();
   state.stopRequested = false;
+  state.unexpectedRestartCount = 0;
   state.recordStartAt = performance.now();
 
   const w = Math.min(1280, Math.max(640, window.innerWidth));
@@ -1182,65 +1283,116 @@ async function startRecording() {
 
   state.mixedStream = new MediaStream(tracks);
   state.chunks = [];
+  state.recording = true;
 
-  try {
-    const options = state.recordMime ? { mimeType: state.recordMime } : {};
-    state.recorder = new MediaRecorder(state.mixedStream, options);
-  } catch (error) {
-    alert('このブラウザでは録画を開始できませんでした。別のブラウザで試してください。');
-    stopped = true;
-    state.stopRequested = false;
-    return;
-  }
-
-  state.recorder.ondataavailable = event => {
-    if (event.data && event.data.size > 0) state.chunks.push(event.data);
-  };
-  state.recorder.onstop = () => {
-    // 停止ボタン以外でMediaRecorderが止まった場合は、自動ダウンロードせずUIを録画開始に戻します。
-    // 実際の停止は stopRecording() からだけ行います。
-    if (!state.stopRequested) {
-      stopped = true;
-      cancelAnimationFrame(state.recordLoop);
-      if (state.micStream) state.micStream.getTracks().forEach(track => track.stop());
-      if (state.mixedStream) state.mixedStream.getTracks().forEach(track => track.stop());
-      state.recording = false;
-      elements.recordButton.classList.remove('recording');
-      elements.recordButton.setAttribute('aria-label', '録画開始');
-      elements.recordLabel.textContent = '録画開始';
-      showToast('録画が停止しました。もう一度開始してください');
-      return;
-    }
-
-    stopped = true;
-    cancelAnimationFrame(state.recordLoop);
-
-    const mime = state.recordMime || 'video/webm';
-    const blob = new Blob(state.chunks, { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    a.href = url;
-    a.download = `ar-drawing-${stamp}.${state.recordExt}`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1500);
-
+  const cleanupStreams = () => {
     if (state.micStream) state.micStream.getTracks().forEach(track => track.stop());
     if (state.mixedStream) state.mixedStream.getTracks().forEach(track => track.stop());
+    state.micStream = null;
+    state.mixedStream = null;
+  };
 
-    state.recording = false;
-    state.stopRequested = false;
+  const resetRecordUi = () => {
     elements.recordButton.classList.remove('recording');
     elements.recordButton.setAttribute('aria-label', '録画開始');
     elements.recordLabel.textContent = '録画開始';
   };
 
-  // timesliceを指定すると一部ブラウザで短時間で停止することがあるため、
-  // 明示的に停止ボタンが押されるまで録画を続けます。
-  state.recorder.start();
-  state.recording = true;
+  const finishAndDownload = async () => {
+    stopped = true;
+    cancelAnimationFrame(state.recordLoop);
+
+    const rawMime = state.recordMime || (state.rawRecordExt === 'webm' ? 'video/webm' : 'video/mp4');
+    const rawBlob = new Blob(state.chunks, { type: rawMime });
+    let blob = rawBlob;
+    let ext = state.rawRecordExt;
+
+    if (state.needsMp4Convert) {
+      try {
+        blob = await convertWebmBlobToMp4(rawBlob);
+        ext = 'mp4';
+      } catch (error) {
+        console.error(error);
+        cleanupStreams();
+        state.recording = false;
+        state.stopRequested = false;
+        resetRecordUi();
+        alert('このブラウザではMP4変換に失敗しました。別のブラウザ、または録画時間を短くして試してください。');
+        return;
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    a.href = url;
+    a.download = `ar-drawing-${stamp}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+    cleanupStreams();
+    state.recording = false;
+    state.stopRequested = false;
+    resetRecordUi();
+  };
+
+  const failRecording = (message) => {
+    stopped = true;
+    cancelAnimationFrame(state.recordLoop);
+    cleanupStreams();
+    state.recording = false;
+    state.stopRequested = false;
+    resetRecordUi();
+    if (message) showToast(message);
+  };
+
+  const startRecorderInstance = () => {
+    if (!state.mixedStream || !state.mixedStream.getTracks().some(track => track.readyState === 'live')) {
+      failRecording('録画を継続できませんでした');
+      return false;
+    }
+
+    try {
+      const options = state.recordMime ? { mimeType: state.recordMime } : {};
+      state.recorder = new MediaRecorder(state.mixedStream, options);
+    } catch (error) {
+      failRecording('このブラウザでは録画を開始できませんでした');
+      alert('このブラウザでは録画を開始できませんでした。別のブラウザで試してください。');
+      return false;
+    }
+
+    state.recorder.ondataavailable = event => {
+      if (event.data && event.data.size > 0) state.chunks.push(event.data);
+    };
+
+    state.recorder.onerror = () => {
+      // error 後に onstop が呼ばれるブラウザがあるため、ここでは終了処理をしません。
+      // onstop 側で、停止ボタン由来かどうかを判定します。
+    };
+
+    state.recorder.onstop = () => {
+      if (!state.stopRequested && state.recording) {
+        // ブラウザ都合で MediaRecorder が止まった場合でも、ユーザーが停止を押すまでは録画を続けます。
+        state.unexpectedRestartCount += 1;
+        showToast('録画を継続中');
+        setTimeout(() => {
+          if (state.recording && !state.stopRequested) startRecorderInstance();
+        }, 120);
+        return;
+      }
+
+      finishAndDownload();
+    };
+
+    // 小さなチャンクを定期的に吐かせると、Android Chrome で短時間停止しにくくなります。
+    state.recorder.start(1000);
+    return true;
+  };
+
+  if (!startRecorderInstance()) return;
+
   // 録画中も各UIをそのまま操作できるよう、調整UIは無効化しません。
   elements.recordButton.classList.add('recording');
   elements.recordButton.setAttribute('aria-label', '録画停止');
