@@ -1250,8 +1250,10 @@ async function startRecording() {
     resetRecordUi();
   };
 
-  // 短いチャンクで定期的にデータを吐かせ、停止時の取りこぼしを防ぎます。
-  state.recorder.start(1000);
+  // MP4はチャンク分割すると断片化MP4(fMP4)となり再生プレイヤーが
+  // 最初のフラグメントしか認識せず「1秒カクカク」現象が起きるため、
+  // タイムスライス引数なしで開始し、stop時に一括で書き出します。
+  state.recorder.start();
   state.recording = true;
 
   // 録画中も各UIをそのまま操作できるよう、調整UIは無効化しません。
@@ -1265,7 +1267,8 @@ function stopRecording() {
   // 誤タップやブラウザの連続clickで即停止しないよう、開始直後は停止を無視します。
   if (performance.now() - state.recordStartAt < 800) return;
   if (state.recorder.state !== 'inactive') {
-    try { state.recorder.requestData(); } catch (_) {}
+    // requestData() は呼ばない。MP4ではチャンク分割が断片化MP4を生み、
+    // 再生プレイヤーが最初のフラグメントだけしか読まない不具合になります。
     state.recorder.stop();
   }
 }
