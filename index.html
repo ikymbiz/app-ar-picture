@@ -219,17 +219,21 @@
       font-size: 11px;
       font-weight: 850;
     }
-    .flip-control input {
+    .flip-toggle {
       width: 100%;
-      margin: 0;
-      accent-color: #fff;
-      touch-action: pan-x;
+      border: 1px solid rgba(255,255,255,.35);
+      border-radius: 999px;
+      padding: 7px 10px;
+      font-size: 12px;
+      font-weight: 900;
+      color: #111;
+      background: rgba(255,255,255,.92);
+      cursor: pointer;
+      text-shadow: none;
+      box-shadow: 0 5px 16px rgba(0,0,0,.22);
     }
-    .flip-caption {
-      font-size: 10px;
-      font-weight: 800;
-      text-align: center;
-      opacity: .9;
+    .flip-toggle.flipped {
+      background: #fde68a;
     }
 
     .pad-title {
@@ -317,19 +321,6 @@
     #dragHitArea.dragging {
       border: 1px dashed rgba(255,255,255,.65);
       background: rgba(255,255,255,.03);
-    }
-    .drag-hint {
-      left: 50%;
-      top: calc(56px + var(--safe-top));
-      transform: translateX(-50%);
-      font-size: 11px;
-      font-weight: 850;
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: rgba(0,0,0,.22);
-      opacity: .72;
-      pointer-events: none;
-      white-space: nowrap;
     }
 
     .modal-backdrop {
@@ -424,12 +415,10 @@
       .record-button { width: 70px; height: 70px; }
       .record-button::before { inset: 12px; }
       .record-button.recording::before { inset: 19px; }
-      .drag-hint { top: calc(52px + var(--safe-top)); }
     }
     @media (max-height: 650px) {
       .pad-wrap { bottom: calc(10px + var(--safe-bottom)); }
       .record-ui { bottom: calc(10px + var(--safe-bottom)); }
-      .drag-hint { display: none; }
     }
   </style>
 </head>
@@ -437,8 +426,6 @@
   <video id="cameraMirror" autoplay muted playsinline webkit-playsinline></video>
   <button class="ui menu-button" id="openMenu" type="button" aria-haspopup="dialog" aria-controls="menuModal">menu</button>
   <div class="ui tiny-toast" id="toast">Hiroを認識</div>
-  <div class="ui drag-hint">絵をドラッグ: 横位置 / 高さ</div>
-
   <div id="dragHitArea" aria-label="絵をドラッグして位置調整"></div>
 
   <div class="ui pad-wrap position-wrap" aria-hidden="true" aria-label="Hiro基準の位置コントロール">
@@ -452,8 +439,7 @@
   <div class="ui pad-wrap rotate-wrap" aria-label="回転コントロール">
     <div class="flip-control" aria-label="絵の向きコントロール">
       <div class="flip-control-row"><span>向き</span><span id="flipLabel">左向き</span></div>
-      <input id="flipSlider" type="range" min="0" max="1" step="1" value="0" aria-label="絵の左右反転">
-      <div class="flip-caption">左 ←→ 右</div>
+      <button class="flip-toggle" id="flipToggle" type="button" aria-pressed="false">左右反転</button>
     </div>
     <div class="pad-title"><span>回転 X/Y</span><button id="resetRotation" type="button">戻す</button></div>
     <div class="pad" id="rotationPad">
@@ -480,7 +466,7 @@
       <div class="modal-header">
         <div>
           <h1 id="menuTitle">動くお絵かきAR</h1>
-          <p>絵はHiroマーカーに追従します。絵を直接ドラッグして、Hiro基準の横位置と高さを調整できます。</p>
+          <p>絵はHiroマーカーに追従します。画面を見ながら向き・回転・大きさ・位置を調整できます。</p>
         </div>
         <button class="close-button" id="closeMenu" type="button" aria-label="閉じる">×</button>
       </div>
@@ -603,6 +589,8 @@ const state = {
   recordLoop: 0,
   recordMime: '',
   recordExt: 'webm',
+  stopRequested: false,
+  recordStartAt: 0,
   lastToastAt: 0,
   motion: 'float'
 };
@@ -629,7 +617,7 @@ const elements = {
   rotationKnob: document.getElementById('rotationKnob'),
   rotationCaption: document.getElementById('rotationCaption'),
   resetRotation: document.getElementById('resetRotation'),
-  flipSlider: document.getElementById('flipSlider'),
+  flipToggle: document.getElementById('flipToggle'),
   flipLabel: document.getElementById('flipLabel'),
   sizePad: document.getElementById('sizePad'),
   sizeKnob: document.getElementById('sizeKnob'),
@@ -700,8 +688,12 @@ function updateArtTransform() {
   elements.rotationCaption.textContent = `X ${rotX}° / Y ${rotY}°`;
   elements.sizeCaption.textContent = `幅 ${state.widthScale.toFixed(2)} / 高さ ${state.heightScale.toFixed(2)}`;
   elements.positionCaption.textContent = `横 ${state.offsetX.toFixed(1)} / 高さ ${state.offsetY.toFixed(1)}`;
-  elements.flipLabel.textContent = state.flipX < 0 ? '右向き' : '左向き';
+  const flipped = state.flipX < 0;
+  elements.flipLabel.textContent = flipped ? '右向き' : '左向き';
+  elements.flipToggle.classList.toggle('flipped', flipped);
+  elements.flipToggle.setAttribute('aria-pressed', flipped ? 'true' : 'false');
 }
+
 
 
 function setMotion(type) {
@@ -786,15 +778,15 @@ function resetAll() {
   resetPosition();
   resetRotation();
   state.flipX = 1;
-  elements.flipSlider.value = '0';
+  // 左右反転は標準向きに戻します。
   resetSize();
   setMotion(elements.motion.value);
   closeModal();
 }
 
 elements.resetRotation.addEventListener('click', resetRotation);
-elements.flipSlider.addEventListener('input', event => {
-  state.flipX = event.target.value === '1' ? -1 : 1;
+elements.flipToggle.addEventListener('click', () => {
+  state.flipX = state.flipX < 0 ? 1 : -1;
   updateArtTransform();
 });
 elements.resetSize.addEventListener('click', resetSize);
@@ -1156,6 +1148,8 @@ async function startRecording() {
   }
 
   pickRecordingMime();
+  state.stopRequested = false;
+  state.recordStartAt = performance.now();
 
   const w = Math.min(1280, Math.max(640, window.innerWidth));
   const h = Math.round(w * (window.innerHeight / window.innerWidth));
@@ -1192,6 +1186,7 @@ async function startRecording() {
   } catch (error) {
     alert('このブラウザでは録画を開始できませんでした。別のブラウザで試してください。');
     stopped = true;
+    state.stopRequested = false;
     return;
   }
 
@@ -1199,6 +1194,21 @@ async function startRecording() {
     if (event.data && event.data.size > 0) state.chunks.push(event.data);
   };
   state.recorder.onstop = () => {
+    // 停止ボタン以外でMediaRecorderが止まった場合は、自動ダウンロードせずUIを録画開始に戻します。
+    // 実際の停止は stopRecording() からだけ行います。
+    if (!state.stopRequested) {
+      stopped = true;
+      cancelAnimationFrame(state.recordLoop);
+      if (state.micStream) state.micStream.getTracks().forEach(track => track.stop());
+      if (state.mixedStream) state.mixedStream.getTracks().forEach(track => track.stop());
+      state.recording = false;
+      elements.recordButton.classList.remove('recording');
+      elements.recordButton.setAttribute('aria-label', '録画開始');
+      elements.recordLabel.textContent = '録画開始';
+      showToast('録画が停止しました。もう一度開始してください');
+      return;
+    }
+
     stopped = true;
     cancelAnimationFrame(state.recordLoop);
 
@@ -1218,12 +1228,15 @@ async function startRecording() {
     if (state.mixedStream) state.mixedStream.getTracks().forEach(track => track.stop());
 
     state.recording = false;
+    state.stopRequested = false;
     elements.recordButton.classList.remove('recording');
     elements.recordButton.setAttribute('aria-label', '録画開始');
     elements.recordLabel.textContent = '録画開始';
   };
 
-  state.recorder.start(250);
+  // timesliceを指定すると一部ブラウザで短時間で停止することがあるため、
+  // 明示的に停止ボタンが押されるまで録画を続けます。
+  state.recorder.start();
   state.recording = true;
   elements.recordButton.classList.add('recording');
   elements.recordButton.setAttribute('aria-label', '録画停止');
@@ -1232,7 +1245,11 @@ async function startRecording() {
 
 function stopRecording() {
   if (!state.recording || !state.recorder) return;
+  // 誤タップやブラウザの連続clickで即停止しないよう、開始直後は停止を無視します。
+  if (performance.now() - state.recordStartAt < 800) return;
+  state.stopRequested = true;
   if (state.recorder.state !== 'inactive') {
+    try { state.recorder.requestData(); } catch (_) {}
     state.recorder.stop();
   }
 }
